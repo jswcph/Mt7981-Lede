@@ -78,6 +78,15 @@ jobs:
           sudo chown $USER:$USER /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
 
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$ANDROID_SDK_ROOT"
+          docker image prune -a --force
+          df -h           
+
       - name: part1 - 准备编译环境与源码
         run: |
           chmod +x scripts/part1.sh
