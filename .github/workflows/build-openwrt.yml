@@ -1,0 +1,155 @@
+name: Build OpenWrt Firmware
+
+on:
+  schedule:
+    # 每周日 22:00 北京时间 = UTC 周日 14:00
+    - cron: '0 14 * * 0'
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的设备（all = 全部机型）'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - h3c_magic-nx30-pro
+          - qihoo_360t7
+          - xiaomi_mi-router-ax3000t
+          - cmcc_rax3000m-nand
+      repo_url:
+        description: '源码仓库地址（默认为 coolsnowwolf/lede，找不到设备可换成 immortalwrt）'
+        required: false
+        default: 'https://github.com/coolsnowwolf/lede'
+      repo_branch:
+        description: '源码分支'
+        required: false
+        default: 'master'
+
+env:
+  TZ: Asia/Shanghai
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          INPUT_DEVICE="${{ github.event.inputs.device }}"
+          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
+            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand"]}' >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/coolsnowwolf/lede' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'master' }}
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+
+      - name: 调整工作目录到扩容分区
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown $USER:$USER /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: part1 - 准备编译环境与源码
+        run: |
+          chmod +x scripts/part1.sh
+          cd "$WORKDIR" || true
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+
+      - name: part2 - 写入设备与个性化配置
+        run: |
+          chmod +x scripts/part2.sh
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+
+      - name: 下载编译所需依赖包
+        run: |
+          cd "$WORKDIR/openwrt"
+          make download -j8
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: 开始编译固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "src/gcc $(nproc) 线程编译，设备：$DEVICE"
+          make -j$(nproc) V=s || make -j1 V=s
+
+      - name: 整理固件产物
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          cd "$WORKDIR/openwrt/bin/targets"
+          find . -type f \( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" \) \
+            -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+          cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed" || true
+
+      - name: 上传固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+
+      - name: 下载所有固件 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware
+
+      - name: 生成 Release 说明
+        run: |
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
+
+      - name: 整理发布文件
+        id: meta
+        run: |
+          mkdir -p release
+          find firmware -type f \( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" -o -iname "*.seed" \) \
+            -exec cp {} release/ \;
+          echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: 发布到 Release 页面
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: OpenWrt 固件自动构建 ${{ steps.meta.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: release/*
