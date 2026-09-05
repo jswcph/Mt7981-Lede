@@ -55,7 +55,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
-      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/coolsnowwolf/lede' }}
+      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
       REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'master' }}
       DEVICE: ${{ matrix.device }}
     steps:
