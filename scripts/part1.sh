@@ -32,9 +32,9 @@ src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
 src-git luci_app_argon_config https://github.com/jerrykuku/luci-app-argon-config
 EOF
 
-echo "==== [4/5] 添加 iStore 商店（直接放入 package 目录）===="
-rm -rf package/istore
-git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
+#echo "==== [4/5] 添加 iStore 商店（直接放入 package 目录）===="
+#rm -rf package/istore
+#git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
 
 echo "==== [5/5] 更新并安装所有 Feeds ===="
 ./scripts/feeds update -a
