@@ -17,6 +17,7 @@ on:
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
           - cmcc_rax3000m-nand
+          - abt_asr3000
       repo_url:
         description: '源码仓库地址（默认为 coolsnowwolf/lede，找不到设备可换成 immortalwrt）'
         required: false
@@ -42,7 +43,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
