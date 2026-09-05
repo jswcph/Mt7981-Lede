@@ -1,6 +1,7 @@
+```bash
 #!/bin/bash
 #=================================================
-# part1.sh (精简版 - 假设 workflow 已做磁盘清理)
+# part1.sh (精简版 + Mihomo Meta ARM64)
 #=================================================
 set -e
 
@@ -10,13 +11,75 @@ SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 
 echo "==== [1/5] 安装编译依赖 ===="
 sudo -E apt-get -qq update
-sudo -E apt-get -qq install -y ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison build-essential \
-  bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
-  git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
-  libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
-  mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip libpython3-dev \
-  python3-ply python3-docutils qtbase5-dev rsync scons squashfs-tools subversion swig texinfo \
-  upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+sudo -E apt-get -qq install -y \
+  ack \
+  antlr3 \
+  aria2 \
+  asciidoc \
+  autoconf \
+  automake \
+  autopoint \
+  binutils \
+  bison \
+  build-essential \
+  bzip2 \
+  ccache \
+  cmake \
+  cpio \
+  curl \
+  device-tree-compiler \
+  fastjar \
+  flex \
+  gawk \
+  gettext \
+  gcc-multilib \
+  g++-multilib \
+  git \
+  golang-go \
+  gperf \
+  haveged \
+  help2man \
+  intltool \
+  libc6-dev-i386 \
+  libelf-dev \
+  libglib2.0-dev \
+  libgmp3-dev \
+  libltdl-dev \
+  libmpc-dev \
+  libmpfr-dev \
+  libncurses5-dev \
+  libncursesw5-dev \
+  libreadline-dev \
+  libssl-dev \
+  libtool \
+  lrzsz \
+  mkisofs \
+  msmtp \
+  ninja-build \
+  p7zip \
+  p7zip-full \
+  patch \
+  pkgconf \
+  python3 \
+  python3-pip \
+  libpython3-dev \
+  python3-ply \
+  python3-docutils \
+  qtbase5-dev \
+  rsync \
+  scons \
+  squashfs-tools \
+  subversion \
+  swig \
+  texinfo \
+  upx-ucl \
+  unzip \
+  vim \
+  wget \
+  xmlto \
+  xxd \
+  zlib1g-dev
+
 sudo timedatectl set-timezone "Asia/Shanghai" || true
 
 echo "==== [2/5] 克隆源码: ${REPO_URL} (分支: ${REPO_BRANCH}) ===="
@@ -85,3 +148,4 @@ echo "==== [5/5] 更新并安装所有 Feeds ===="
 ./scripts/feeds install -a
 
 echo ">>> part1.sh 执行完毕，源码已就绪：${SRC_DIR}"
+```
