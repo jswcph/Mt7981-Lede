@@ -172,7 +172,6 @@ src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
 src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-src-git luci_app_argon_config https://github.com/jerrykuku/luci-app-argon-config
 EOF
 
 echo ">>> 自定义 Feeds:"
@@ -180,8 +179,6 @@ echo "    PassWall"
 echo "    PassWall Packages"
 echo "    OpenClash"
 echo "    Argon Theme"
-echo "    Argon Config"
-
 
 #=================================================
 # iStore 已禁用
