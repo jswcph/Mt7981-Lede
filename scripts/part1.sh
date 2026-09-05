@@ -94,7 +94,7 @@ sudo timedatectl set-timezone "Asia/Shanghai" || true
 
 #=================================================
 # 安装独立 Go 环境
-# 不使用 Ubuntu 自带的 Go 1.18
+# 不使用 Ubuntu 自带的旧版 Go
 #=================================================
 
 echo "==== 安装 Go 编译环境 ===="
@@ -129,7 +129,6 @@ which go
 echo ">>> Go 版本:"
 go version
 
-# 强制确认不是系统旧版 Go
 GO_BIN="$(which go)"
 
 if [ "${GO_BIN}" != "/usr/local/go/bin/go" ]; then
@@ -273,8 +272,16 @@ file "${SRC_DIR}/clash_meta"
 echo ">>> 文件大小:"
 ls -lh "${SRC_DIR}/clash_meta"
 
-echo ">>> Mihomo 版本:"
-"${SRC_DIR}/clash_meta" -v
+echo ">>> 检查 ARM64 ELF 架构:"
+
+if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
+    echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
+    exit 1
+fi
+
+echo ">>> Mihomo ARM64 核心编译成功"
+echo ">>> 当前 GitHub Runner 是 x86_64"
+echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
 
 
 #=================================================
@@ -295,7 +302,7 @@ chmod 0755 \
 
 
 #=================================================
-# 最终检查
+# 检查 OpenClash Meta 核心
 #=================================================
 
 echo "==== 检查 OpenClash Meta 核心 ===="
@@ -309,7 +316,7 @@ echo ">>> OpenClash Meta 核心:"
 ls -lh \
   "${SRC_DIR}/files/etc/openclash/core/clash_meta"
 
-echo ">>> 架构:"
+echo ">>> 核心架构:"
 file \
   "${SRC_DIR}/files/etc/openclash/core/clash_meta"
 
