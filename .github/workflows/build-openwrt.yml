@@ -20,7 +20,7 @@ on:
       repo_url:
         description: '源码仓库地址（默认为 coolsnowwolf/lede，找不到设备可换成 immortalwrt）'
         required: false
-        default: 'https://github.com/coolsnowwolf/lede'
+        default: 'https://github.com/immortalwrt/immortalwrt'
       repo_branch:
         description: '源码分支'
         required: false
