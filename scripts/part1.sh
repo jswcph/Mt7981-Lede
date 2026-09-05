@@ -334,7 +334,17 @@ cd "${SRC_DIR}"
 
 ./scripts/feeds install -a
 
+echo "==== 配置 Argon 默认主题 ===="
 
+ARGON_UCI_DIR="${SRC_DIR}/feeds/luci-theme-argon/root/etc/config"
+
+if [ -d "${ARGON_UCI_DIR}" ]; then
+    echo ">>> Argon 配置目录:"
+    ls -la "${ARGON_UCI_DIR}"
+else
+    echo "ERROR: 找不到 Argon 配置目录"
+    exit 1
+fi
 #=================================================
 # 完成
 #=================================================
