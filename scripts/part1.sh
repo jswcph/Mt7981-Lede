@@ -328,6 +328,8 @@ echo "==== Mihomo Meta 核心准备完成 ===="
 
 echo "==== [5/5] 更新并安装所有 Feeds ===="
 
+cd "${SRC_DIR}"
+
 ./scripts/feeds update -a
 
 ./scripts/feeds install -a
