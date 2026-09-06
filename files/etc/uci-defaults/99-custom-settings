@@ -3,6 +3,8 @@
 
 # 主机名
 uci set system.@system[0].hostname='OpenWrt'
+# 缩小系统日志内存缓冲区（默认64，纯路由+科学上网场景32~48够用，省内存）
+uci set system.@system[0].log_size='32'
 
 # LAN 地址
 uci set network.lan.ipaddr='192.168.6.1'
