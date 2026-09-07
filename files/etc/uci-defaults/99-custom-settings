@@ -1,24 +1,43 @@
 #!/bin/sh
 # 首次开机自动执行一次：写入主机名/LAN地址/WiFi名称/默认密码/主题/语言
-
 # 主机名
 uci set system.@system[0].hostname='OpenWrt'
 # 缩小系统日志内存缓冲区（默认64，纯路由+科学上网场景32~48够用，省内存）
 uci set system.@system[0].log_size='32'
-
 # LAN 地址
 uci set network.lan.ipaddr='192.168.6.1'
 
-# WiFi SSID（按接口是否存在自动匹配，避免单频设备报错）
-[ -n "$(uci -q get wireless.@wifi-iface[0])" ] && uci set wireless.@wifi-iface[0].ssid='OpenWrt_2.4G'
-[ -n "$(uci -q get wireless.@wifi-iface[1])" ] && uci set wireless.@wifi-iface[1].ssid='OpenWrt_5G'
+# WiFi SSID + 密码（按接口是否存在自动匹配，避免单频设备报错）
+if [ -n "$(uci -q get wireless.@wifi-iface[0])" ]; then
+    uci set wireless.@wifi-iface[0].ssid='OpenWrt_2.4G'
+    uci set wireless.@wifi-iface[0].encryption='psk2'
+    uci set wireless.@wifi-iface[0].key='password'
+fi
+if [ -n "$(uci -q get wireless.@wifi-iface[1])" ]; then
+    uci set wireless.@wifi-iface[1].ssid='OpenWrt_5G'
+    uci set wireless.@wifi-iface[1].encryption='psk2'
+    uci set wireless.@wifi-iface[1].key='password'
+fi
 
-# 默认密码：password
+# 5G 频段默认开启 160MHz 带宽
+# 优先按 band=5g 判断具体是哪个 wifi-device，避免设备顺序不固定导致设错频段
+for dev in $(uci -q show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+    band="$(uci -q get wireless.${dev}.band)"
+    if [ "$band" = "5g" ]; then
+        cur_htmode="$(uci -q get wireless.${dev}.htmode)"
+        case "$cur_htmode" in
+            HE*)  uci set wireless.${dev}.htmode='HE160' ;;
+            EHT*) uci set wireless.${dev}.htmode='EHT160' ;;
+            *)    uci set wireless.${dev}.htmode='VHT160' ;;
+        esac
+    fi
+done
+
+# 默认密码：password（登录/SSH）
 (echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
 
 # 默认主题：Argon
 uci set luci.main.mediaurlbase='/luci-static/argon'
-
 # 默认语言：简体中文
 uci set luci.main.lang='zh_cn'
 
@@ -26,5 +45,4 @@ uci commit system
 uci commit network
 uci commit wireless
 uci commit luci
-
 exit 0
