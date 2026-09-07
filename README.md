@@ -41,3 +41,6 @@
 - 源码仓库默认是 `coolsnowwolf/lede`，如果对应机型的 DTS 在该源码里不存在，手动触发时把 `repo_url` 改成 `https://github.com/immortalwrt/immortalwrt` 再试。
 - `config/devices/*.config` 里的 `filogic` 是按 mt7981b 常见 subtarget 猜测的，如果编译产物里缺设备，请对照源码里 `target/linux/mediatek/` 下实际路径调整。
 - 默认密码是明文写死在开机脚本里的，仅适合自用/内网环境，公网暴露前请务必手动改密码。
+
+# 本仓库源码来自LEDE
+## https://github.com/coolsnowwolf/lede
