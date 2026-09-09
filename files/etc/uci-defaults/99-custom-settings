@@ -1,13 +1,33 @@
 #!/bin/sh
-# 首次开机自动执行一次：写入主机名/LAN地址/WiFi名称/默认密码/主题/语言
+# 首次开机自动执行一次：写入主机名/LAN地址/网口分配/WiFi名称/默认密码/主题/语言
 # 主机名
 uci set system.@system[0].hostname='OpenWrt'
 # 缩小系统日志内存缓冲区（默认64，纯路由+科学上网场景32~48够用，省内存）
 uci set system.@system[0].log_size='32'
-# LAN 地址
-uci set network.lan.ipaddr='192.168.6.1'
 
-# WiFi SSID + 密码（按接口是否存在自动匹配，避免单频设备报错）
+# 网口：lan1 = WAN，lan2/lan3/lan4 = LAN
+# Nokia XG-040G-MD/MF 的 ImmortalWrt board.d 默认将 lan1~lan4 放入 LAN，
+# 这里仅对本 Nokia 分支覆盖为 lan1=WAN、lan2~lan4=LAN。
+uci -q delete network.wan
+uci set network.wan='interface'
+uci set network.wan.device='lan1'
+uci set network.wan.proto='dhcp'
+
+uci -q delete network.lan.device
+uci set network.lan='interface'
+uci set network.lan.device='br-lan'
+uci set network.lan.proto='static'
+uci set network.lan.ipaddr='192.168.6.1'
+uci set network.lan.netmask='255.255.255.0'
+
+uci -q delete network.lan_bridge
+uci set network.lan_bridge='device'
+uci set network.lan_bridge.type='bridge'
+uci add_list network.lan_bridge.ports='lan2'
+uci add_list network.lan_bridge.ports='lan3'
+uci add_list network.lan_bridge.ports='lan4'
+
+# WiFi SSID + 密码（按接口是否存在自动匹配，避免设备顺序不固定导致报错）
 if [ -n "$(uci -q get wireless.@wifi-iface[0])" ]; then
     uci set wireless.@wifi-iface[0].ssid='OpenWrt_2.4G'
     uci set wireless.@wifi-iface[0].encryption='psk2'
