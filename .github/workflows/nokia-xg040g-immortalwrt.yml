@@ -2,7 +2,6 @@ name: Build Nokia XG-040G-MD/MF Firmware
 
 on:
   schedule:
-    # 每周日 22:00 北京时间 = UTC 周日 14:00
     - cron: '0 14 * * 0'
 
   workflow_dispatch:
@@ -39,13 +38,11 @@ jobs:
         shell: bash
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
-
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
             MATRIX='{"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi"]}'
           else
             MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
           fi
-
           echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "构建矩阵：$MATRIX"
 
@@ -137,11 +134,15 @@ jobs:
         run: |
           cd "$WORKDIR/openwrt"
           echo "使用 2 线程编译，设备：$DEVICE"
+          set +e
           make -j2 V=sc
-          if [ $? -ne 0 ]; then
+          RC=$?
+          if [ "$RC" -ne 0 ]; then
             echo "2线程编译失败，降级为单线程..."
             make -j1 V=sc
+            RC=$?
           fi
+          exit "$RC"
         timeout-minutes: 300
 
       - name: 整理固件产物
@@ -149,19 +150,8 @@ jobs:
           set -e
           mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
           cd "$WORKDIR/openwrt/bin/targets"
-
-          find . -type f \( \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*recovery*' -o \
-            -iname '*.img.gz' -o \
-            -iname '*.itb' -o \
-            -iname '*.bin' \
-          \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
-
-          cp "$WORKDIR/openwrt/.config" \
-             "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
-
+          find . -type f \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*recovery*' -o -iname '*.img.gz' -o -iname '*.itb' -o -iname '*.bin' \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+          cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
           echo "===== ${DEVICE} 固件文件 ====="
           find "$GITHUB_WORKSPACE/firmware/${DEVICE}" -maxdepth 1 -type f -printf '%f\n' | sort
 
@@ -198,19 +188,8 @@ jobs:
         run: |
           set -e
           mkdir -p release
-
-          find firmware -type f \( \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*recovery*' -o \
-            -iname '*.img.gz' -o \
-            -iname '*.itb' -o \
-            -iname '*.bin' -o \
-            -iname '*.seed' \
-          \) -exec cp {} release/ \;
-
+          find firmware -type f \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*recovery*' -o -iname '*.img.gz' -o -iname '*.itb' -o -iname '*.bin' -o -iname '*.seed' \) -exec cp {} release/ \;
           echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-
           echo "===== Release 文件 ====="
           find release -maxdepth 1 -type f -printf '%f\n' | sort
 
