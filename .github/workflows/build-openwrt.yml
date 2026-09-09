@@ -24,9 +24,6 @@ env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: master
 
-actions:
-  checkout: true
-
 permissions:
   contents: write
 
