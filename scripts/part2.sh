@@ -25,7 +25,6 @@ fi
 
 echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
-
 echo "==== 写入默认系统设置覆盖目录 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
@@ -63,5 +62,33 @@ fi
 echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
+
+#=================================================
+# Nokia XG-040G-MD/MF 无无线硬件
+# make defconfig 可能根据 target/default 依赖重新选择无线组件，
+# 因此在 defconfig 后再次强制关闭无线相关用户空间组件和驱动包。
+#=================================================
+if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
+  echo "==== Nokia XG-040G：强制关闭无线驱动/无线管理组件 ===="
+  for sym in \
+    CONFIG_PACKAGE_wpad-openssl \
+    CONFIG_PACKAGE_wifi-scripts \
+    CONFIG_PACKAGE_wireless-regdb \
+    CONFIG_PACKAGE_kmod-cfg80211 \
+    CONFIG_PACKAGE_kmod-mac80211 \
+    CONFIG_PACKAGE_kmod-mt76 \
+    CONFIG_PACKAGE_kmod-mt76-core \
+    CONFIG_PACKAGE_kmod-mt76-connac \
+    CONFIG_PACKAGE_kmod-mt7915e \
+    CONFIG_PACKAGE_kmod-mt7916 \
+    CONFIG_PACKAGE_kmod-mt7996 \
+    CONFIG_PACKAGE_kmod-mt7996-firmware; do
+    sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
+    echo "# ${sym} is not set" >> .config
+  done
+
+  echo "==== 无线配置最终检查 ===="
+  grep -E '^(CONFIG_PACKAGE_(wpad|wifi-scripts|wireless-regdb)|CONFIG_PACKAGE_kmod-(cfg80211|mac80211|mt76|mt7915|mt7916|mt7996))' .config || true
+fi
 
 echo ">>> part2.sh 执行完毕，当前编译设备：${DEVICE}"
