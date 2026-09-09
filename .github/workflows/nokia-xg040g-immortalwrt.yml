@@ -1,4 +1,4 @@
-name: Build Nokia XG-040G-MD/MF Firmware
+name: Build Nokia XG-040G-MD/MF + Ruijie RG-X60 Pro 107M
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       device:
-        description: '选择要编译的 Nokia XG-040G 设备'
+        description: '选择要编译的设备'
         required: true
         default: 'all'
         type: choice
@@ -18,6 +18,7 @@ on:
           - nokia_xg-040g-md-ubi
           - nokia_xg-040g-mf
           - nokia_xg-040g-mf-ubi
+          - ruijie_x60-pro-107m
 
 env:
   TZ: Asia/Shanghai
@@ -40,7 +41,7 @@ jobs:
           INPUT_DEVICE="${{ github.event.inputs.device }}"
 
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            MATRIX='{"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi"]}'
+            MATRIX='{"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi","ruijie_x60-pro-107m"]}'
           else
             MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
           fi
@@ -59,6 +60,8 @@ jobs:
     steps:
       - name: 检出本仓库
         uses: actions/checkout@v4
+        with:
+          ref: nokia-xg040g-immortalwrt
 
       - name: 释放磁盘空间
         uses: easimon/maximize-build-space@master
@@ -98,7 +101,7 @@ jobs:
           REPO_URL: ${{ env.REPO_URL }}
           REPO_BRANCH: ${{ env.REPO_BRANCH }}
 
-      - name: part2 - 写入 Nokia XG-040G 设备与个性化配置
+      - name: part2 - 写入设备与个性化配置
         run: |
           chmod +x scripts/part2.sh
           bash "$GITHUB_WORKSPACE/scripts/part2.sh"
@@ -115,9 +118,19 @@ jobs:
           echo "分支：$REPO_BRANCH"
           echo "==============================================="
           grep -E '^CONFIG_TARGET_(airoha|mediatek)|^CONFIG_TARGET.*DEVICE' .config || true
+
+          if [ "$DEVICE" = "ruijie_x60-pro-107m" ]; then
+            echo "==============================================="
+            echo "检查 Ruijie RG-X60 Pro 107M DTS："
+            grep -A2 'partition@680000' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts
+            echo "==============================================="
+            echo "检查 107M UBI 分区长度："
+            grep 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts
+          fi
+
           echo "==============================================="
-          echo "检查 Nokia XG-040G 目标是否进入最终配置："
-          grep -E 'CONFIG_TARGET_airoha_an758[13]_DEVICE_nokia_xg-040g' .config || true
+          echo "检查 USB / 存储 / USB 网卡 / NAS 配置："
+          grep -E '^CONFIG_PACKAGE_(kmod-usb|kmod-fs-|block-mount|usbutils|luci-app-samba4|samba4-|wsdd2)' .config || true
 
       - name: 下载编译所需依赖包
         run: |
@@ -171,6 +184,8 @@ jobs:
     steps:
       - name: 检出本仓库
         uses: actions/checkout@v4
+        with:
+          ref: nokia-xg040g-immortalwrt
 
       - name: 下载所有固件 Artifact
         uses: actions/download-artifact@v4
@@ -207,6 +222,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: Nokia XG-040G ImmortalWrt 固件 ${{ steps.meta.outputs.tag }}
+          name: Nokia + Ruijie RG-X60 Pro 107M ImmortalWrt 固件 ${{ steps.meta.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
