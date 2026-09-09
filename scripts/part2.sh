@@ -1,7 +1,7 @@
 #!/bin/bash
 #=================================================
 # part2.sh
-# 功能：合并 通用配置 + 设备配置 生成 .config
+# 功能：合并 通用配置 + 设备配置生成最终 .config
 #       写入默认系统设置覆盖目录 files/
 #       执行 defconfig 解析依赖
 #=================================================
@@ -12,7 +12,7 @@ BASE_DIR="$GITHUB_WORKSPACE"   # 仓库根目录（本地调试可自行改成�
 [ -z "$BASE_DIR" ] && BASE_DIR="$(pwd)"
 
 if [ -z "${DEVICE}" ]; then
-  echo "错误：未指定 DEVICE 环境变量（例如 export DEVICE=h3c_magic-nx30-pro）"
+  echo "错误：未指定 DEVICE 环境变量"
   exit 1
 fi
 
@@ -30,8 +30,26 @@ echo "==== 写入默认系统设置覆盖目录 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
 cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
-# 确保首次开机脚本有执行权限（git 有时不保留执行位）
 find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
+
+#=================================================
+# Ruijie RG-X60 Pro 107M DTS
+# 使用用户提供的 107M 分区版本；不修改 ImmortalWrt master
+# 中原有设备定义，只替换本次构建使用的 DTS 文件。
+#=================================================
+if [ "${DEVICE}" = "ruijie_x60-pro-107m" ]; then
+  CUSTOM_DTS="${BASE_DIR}/custom/mt7986a-ruijie-rg-x60-pro-107m.dts"
+  TARGET_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
+
+  if [ ! -f "${CUSTOM_DTS}" ]; then
+    echo "错误：找不到 X60 Pro 107M DTS：${CUSTOM_DTS}"
+    exit 1
+  fi
+
+  echo "==== 注入 Ruijie RG-X60 Pro 107M DTS ===="
+  cp "${CUSTOM_DTS}" "${TARGET_DTS}"
+  grep -A2 'partition@680000' "${TARGET_DTS}"
+fi
 
 echo "==== 写回预编译的 Mihomo Meta 核心 ===="
 mkdir -p "${SRC_DIR}/files/etc/openclash/core"
