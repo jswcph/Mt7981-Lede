@@ -13,17 +13,20 @@ cat > RELEASE_NOTES.md << EOF
 编译时间：${DATE_STR}（北京时间）
 
 ### 支持机型
-- H3C Magic NX30 Pro
-- 奇虎 360T7
-- 小米 AX3000T
-- 移动 RAX3000M（NAND 版）
+- Nokia XG-040G-MD
+- Nokia XG-040G-MD UBI
+- Nokia XG-040G-MF
+- Nokia XG-040G-MF UBI
+- Ruijie RG-X60 Pro 107M UBI
 
 ### 内置插件
 - Passwall（科学上网）
 - OpenClash（科学上网）
-- iStore 软件商店
-- 终端（ttyd）
-- Argon 主题及主题设置面板，已默认启用并汉化
+- Argon 主题及主题设置面板
+- USB 2.0 / USB 3.0
+- USB 存储 / UAS
+- USB 转 RJ45 网卡驱动
+- Samba4 NAS
 
 ### 默认参数
 | 项目 | 值 |
@@ -31,12 +34,10 @@ cat > RELEASE_NOTES.md << EOF
 | 主机名 | OpenWrt |
 | 默认密码 | password |
 | LAN 地址 | 192.168.6.1 |
-| WiFi 2.4G 名称 | OpenWrt_2.4G |
-| WiFi 5G 名称 | OpenWrt_5G |
 | 默认语言 | 简体中文 |
 | 默认主题 | Argon |
 
-> 固件每周日 22:00（北京时间）由 GitHub Actions 自动编译发布，仅供个人学习测试使用，请刷机前确认与自己设备型号完全一致。
+> Nokia 与 Ruijie 固件请务必确认设备型号、Flash 分区布局和对应 U-Boot 后再刷写。本 Release 中的 Ruijie RG-X60 Pro 版本使用 107M UBI 分区布局。
 EOF
 
 echo "RELEASE_NOTES.md 生成完毕"
