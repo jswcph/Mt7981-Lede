@@ -1,0 +1,223 @@
+name: Build Nokia XG-040G-MD/MF Firmware
+
+on:
+  schedule:
+    # 每周日 22:00 北京时间 = UTC 周日 14:00
+    - cron: '0 14 * * 0'
+
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的 Nokia XG-040G 设备'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - nokia_xg-040g-md
+          - nokia_xg-040g-md-ubi
+          - nokia_xg-040g-mf
+          - nokia_xg-040g-mf-ubi
+
+env:
+  TZ: Asia/Shanghai
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+  BUILD_CONFIG_BRANCH: nokia-xg040g-immortalwrt
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 设置构建矩阵
+        id: set-matrix
+        shell: bash
+        run: |
+          INPUT_DEVICE="${{ github.event.inputs.device }}"
+
+          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
+            MATRIX='{"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi"]}'
+          else
+            MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "构建矩阵：$MATRIX"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出 Nokia 构建配置分支
+        uses: actions/checkout@v4
+        with:
+          ref: nokia-xg040g-immortalwrt
+          fetch-depth: 1
+
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+
+      - name: 调整工作目录到扩容分区
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown $USER:$USER /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: part1 - 准备 ImmortalWrt 编译环境与源码
+        run: |
+          chmod +x scripts/part1.sh
+          cd "$WORKDIR" || exit 1
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          REPO_URL: ${{ env.REPO_URL }}
+          REPO_BRANCH: ${{ env.REPO_BRANCH }}
+
+      - name: part2 - 写入 Nokia XG-040G 设备与个性化配置
+        run: |
+          chmod +x scripts/part2.sh
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          DEVICE: ${{ matrix.device }}
+
+      - name: 校验最终设备配置
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "==============================================="
+          echo "设备：$DEVICE"
+          echo "源码：$REPO_URL"
+          echo "分支：$REPO_BRANCH"
+          echo "配置来源分支：$BUILD_CONFIG_BRANCH"
+          echo "==============================================="
+          grep -E '^CONFIG_TARGET_(airoha|mediatek)|^CONFIG_TARGET.*DEVICE' .config || true
+          echo "==============================================="
+          echo "检查 Nokia XG-040G 目标是否进入最终配置："
+          grep -E 'CONFIG_TARGET_airoha_an758[13]_DEVICE_nokia_xg-040g' .config || true
+          echo "==============================================="
+          echo "检查 USB / 存储 / USB 网卡 / NAS 配置："
+          grep -E '^CONFIG_PACKAGE_(kmod-usb|kmod-fs-|block-mount|usbutils|luci-app-samba4|samba4-|wsdd2)' .config || true
+
+      - name: 下载编译所需依赖包
+        run: |
+          cd "$WORKDIR/openwrt"
+          make download -j4
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: 开始编译固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "使用 2 线程编译，设备：$DEVICE"
+          make -j2 V=sc
+          if [ $? -ne 0 ]; then
+            echo "2线程编译失败，降级为单线程..."
+            make -j1 V=sc
+          fi
+        timeout-minutes: 300
+
+      - name: 整理固件产物
+        run: |
+          set -e
+          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          cd "$WORKDIR/openwrt/bin/targets"
+
+          find . -type f \( \
+            -iname '*sysupgrade*' -o \
+            -iname '*factory*' -o \
+            -iname '*recovery*' -o \
+            -iname '*.img.gz' -o \
+            -iname '*.itb' -o \
+            -iname '*.bin' \
+          \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+
+          cp "$WORKDIR/openwrt/.config" \
+             "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
+
+          echo "===== ${DEVICE} 固件文件 ====="
+          find "$GITHUB_WORKSPACE/firmware/${DEVICE}" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出 Nokia 构建配置分支
+        uses: actions/checkout@v4
+        with:
+          ref: nokia-xg040g-immortalwrt
+          fetch-depth: 1
+
+      - name: 下载所有固件 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware
+
+      - name: 生成 Release 说明
+        run: |
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
+
+      - name: 整理发布文件
+        id: meta
+        run: |
+          set -e
+          mkdir -p release
+
+          find firmware -type f \( \
+            -iname '*sysupgrade*' -o \
+            -iname '*factory*' -o \
+            -iname '*recovery*' -o \
+            -iname '*.img.gz' -o \
+            -iname '*.itb' -o \
+            -iname '*.bin' -o \
+            -iname '*.seed' \
+          \) -exec cp {} release/ \;
+
+          echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+          echo "===== Release 文件 ====="
+          find release -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 发布到 Release 页面
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Nokia XG-040G ImmortalWrt 固件 ${{ steps.meta.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: release/*
