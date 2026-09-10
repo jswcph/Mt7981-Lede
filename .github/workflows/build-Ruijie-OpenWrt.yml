@@ -1,0 +1,248 @@
+name: Build Ruijie OpenWrt Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的锐捷设备'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - ruijie_rg-x60-107m
+          - ruijie_rg-x60-pro-107m
+          - ruijie_rg-x30e
+          - ruijie_rg-x30e-pro
+
+  schedule:
+    # 每周日北京时间 03:00 = UTC 周六 19:00
+    - cron: '0 19 * * 6'
+
+env:
+  TZ: Asia/Shanghai
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 设置构建矩阵
+        id: set-matrix
+        shell: bash
+        run: |
+          INPUT_DEVICE="${{ github.event.inputs.device }}"
+
+          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
+            MATRIX='{"device":["ruijie_rg-x60-107m","ruijie_rg-x60-pro-107m","ruijie_rg-x30e","ruijie_rg-x30e-pro"]}'
+          else
+            MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
+          fi
+
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "构建矩阵：$MATRIX"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出 Ruijie 构建配置
+        uses: actions/checkout@v4
+        with:
+          ref: ruijie-series
+          fetch-depth: 1
+
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+
+      - name: 调整工作目录到扩容分区
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown $USER:$USER /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: part1 - 准备 ImmortalWrt 编译环境与源码
+        run: |
+          chmod +x scripts/part1.sh
+          cd "$WORKDIR" || exit 1
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          REPO_URL: ${{ env.REPO_URL }}
+          REPO_BRANCH: ${{ env.REPO_BRANCH }}
+
+      - name: 注入锐捷 DTS / DTSI 与镜像定义
+        run: |
+          chmod +x scripts/ruijie-device-patch.sh
+          bash "$GITHUB_WORKSPACE/scripts/ruijie-device-patch.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          DEVICE: ${{ matrix.device }}
+
+      - name: part2 - 写入通用配置 + 锐捷设备配置
+        run: |
+          chmod +x scripts/part2.sh
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          DEVICE: ${{ matrix.device }}
+
+      - name: 校验最终设备配置
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "==============================================="
+          echo "设备：$DEVICE"
+          echo "源码：$REPO_URL"
+          echo "分支：$REPO_BRANCH"
+          echo "==============================================="
+          grep -E '^CONFIG_TARGET_mediatek|^CONFIG_TARGET.*DEVICE' .config || true
+          echo "==============================================="
+          echo "检查 DTS："
+          case "$DEVICE" in
+            ruijie_rg-x60-107m)
+              grep -n 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-107m.dts
+              ;;
+            ruijie_rg-x60-pro-107m)
+              grep -n 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts
+              ;;
+            ruijie_rg-x30e)
+              grep -n 'reg = <0x880000 0x6F80000>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dts
+              ;;
+            ruijie_rg-x30e-pro)
+              grep -n 'reg = <0x880000 0x6F80000>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts
+              ;;
+          esac
+          echo "==============================================="
+          echo "检查锐捷 DTS/DTSI 依赖文件："
+          ls -lh target/linux/mediatek/dts/*ruijie* | sed -n '1,80p'
+          echo "==============================================="
+          echo "检查 USB 相关配置（本项目四款锐捷设备不主动加入 USB 模块）："
+          grep -E '^CONFIG_PACKAGE_kmod-usb|^CONFIG_PACKAGE_kmod-fs-|^CONFIG_PACKAGE_block-mount' .config || true
+
+      - name: 下载编译所需依赖包
+        run: |
+          cd "$WORKDIR/openwrt"
+          make download -j4
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: 开始编译固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "使用 2 线程编译，设备：$DEVICE"
+          set +e
+          make -j2 V=sc
+          RC=$?
+          if [ "$RC" -ne 0 ]; then
+            echo "2线程编译失败，降级为单线程..."
+            make -j1 V=sc
+            RC=$?
+          fi
+          exit "$RC"
+        timeout-minutes: 300
+
+      - name: 整理固件产物
+        run: |
+          set -e
+          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          cd "$WORKDIR/openwrt/bin/targets"
+
+          find . -type f \( \
+            -iname '*sysupgrade*' -o \
+            -iname '*factory*' -o \
+            -iname '*recovery*' -o \
+            -iname '*.itb' -o \
+            -iname '*.img.gz' -o \
+            -iname '*.bin' \
+          \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+
+          cp "$WORKDIR/openwrt/.config" \
+             "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
+
+          echo "===== ${DEVICE} 固件文件 ====="
+          find "$GITHUB_WORKSPACE/firmware/${DEVICE}" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出 Ruijie 构建配置
+        uses: actions/checkout@v4
+        with:
+          ref: ruijie-series
+          fetch-depth: 1
+
+      - name: 下载所有固件 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware
+
+      - name: 生成 Release 说明
+        run: |
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
+
+      - name: 整理发布文件
+        id: meta
+        run: |
+          set -e
+          mkdir -p release
+          find firmware -type f \( \
+            -iname '*sysupgrade*' -o \
+            -iname '*factory*' -o \
+            -iname '*recovery*' -o \
+            -iname '*.itb' -o \
+            -iname '*.img.gz' -o \
+            -iname '*.bin' -o \
+            -iname '*.seed' \
+          \) -exec cp {} release/ \;
+
+          echo "tag=ruijie-firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+          echo "===== Release 文件 ====="
+          find release -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 发布到 Release 页面
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Ruijie OpenWrt 固件 ${{ steps.meta.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: release/*
