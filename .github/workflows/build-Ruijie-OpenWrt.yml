@@ -152,23 +152,15 @@ jobs:
       - name: 下载编译所需依赖包
         run: |
           cd "$WORKDIR/openwrt"
-          make download -j4
+          make download -j$(nproc)
           find dl -size -1024c -exec rm -f {} \;
 
       - name: 开始编译固件
         run: |
           cd "$WORKDIR/openwrt"
-          echo "使用 2 线程编译，设备：$DEVICE"
-          set +e
-          make -j2 V=sc
-          RC=$?
-          if [ "$RC" -ne 0 ]; then
-            echo "2线程编译失败，降级为单线程..."
-            make -j1 V=sc
-            RC=$?
-          fi
-          exit "$RC"
-        timeout-minutes: 300
+          echo "使用 $(nproc) 线程编译，设备：$DEVICE"
+          make -j$(nproc) V=sc
+          timeout-minutes: 300
 
       - name: 整理固件产物
         run: |
