@@ -130,7 +130,7 @@ jobs:
           echo "检查 DTS："
           case "$DEVICE" in
             ruijie_rg-x60-107m)
-              grep -n 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-ubi-107m.dtsi
+              grep -n 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-107m.dts
               ;;
             ruijie_rg-x60-pro-107m)
               grep -n 'reg = <0x680000 0x6b00000>' target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts
