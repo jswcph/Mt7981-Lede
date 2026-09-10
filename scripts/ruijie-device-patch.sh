@@ -9,18 +9,22 @@ NETWORK_FILE="${SRC_DIR}/target/linux/mediatek/filogic/base-files/etc/board.d/02
 
 mkdir -p "${DTS_DIR}"
 
-# X60 / X60 Pro: 使用 107M DTS。ImmortalWrt master 已有原生设备定义，
-# 这里只把 X60 的 DTS 指向 107M 版本；X60 Pro 直接覆盖同名 DTS。
+echo "==== 复制 Ruijie DTS 文件 ===="
+
+# ---------- X60 107M（核心）----------
+cp "${BASE_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-base.dtsi" \
+   "${DTS_DIR}/mt7986a-ruijie-rg-x60-base.dtsi"
+
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-107m.dts" \
    "${DTS_DIR}/mt7986a-ruijie-rg-x60-107m.dts"
+
+# ---------- X60 Pro ----------
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts" \
    "${DTS_DIR}/mt7986a-ruijie-rg-x60-pro.dts"
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dtsi" \
    "${DTS_DIR}/mt7986a-ruijie-rg-x60-pro.dtsi"
-cp "${BASE_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-ubi-107m.dtsi" \
-   "${DTS_DIR}/mt7986a-ruijie-ubi-107m.dtsi"
 
-# X30E / X30E Pro 的 DTS 与 DTSI 依赖来自 RuijieNetworksCommunity。
+# ---------- X30E / X30E Pro ----------
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7981b-ruijie-rg-x30-base.dtsi" \
    "${DTS_DIR}/mt7981b-ruijie-rg-x30-base.dtsi"
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dtsi" \
@@ -32,31 +36,31 @@ cp "${BASE_DIR}/target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dtsi" \
 cp "${BASE_DIR}/target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts" \
    "${DTS_DIR}/mt7981b-ruijie-rg-x30e-pro.dts"
 
-# X60 107M：使用已有 ruijie_rg-x60 image 定义，只替换 DTS。
+echo "==== 修改 image 定义 (X60 → 使用 107m DTS) ===="
 python3 - "${IMAGE_MK}" <<'PY'
 from pathlib import Path
 p = Path(__import__('sys').argv[1])
 s = p.read_text()
-s2 = s.replace(
-    'define Device/ruijie_rg-x60\n',
-    'define Device/ruijie_rg-x60\n',
-    1
-)
-# 精确替换该设备定义内部的 DTS，不影响其它设备。
-start = s2.find('define Device/ruijie_rg-x60\n')
+
+start = s.find('define Device/ruijie_rg-x60\n')
 if start < 0:
     raise SystemExit('ruijie_rg-x60 definition not found')
-end = s2.find('endef\nTARGET_DEVICES += ruijie_rg-x60', start)
+
+end = s.find('endef\nTARGET_DEVICES += ruijie_rg-x60', start)
 if end < 0:
     raise SystemExit('ruijie_rg-x60 end not found')
-block = s2[start:end]
-block = block.replace('DEVICE_DTS := mt7986a-ruijie-rg-x60\n',
-                      'DEVICE_DTS := mt7986a-ruijie-rg-x60-107m\n')
-s2 = s2[:start] + block + s2[end:]
-p.write_text(s2)
+
+block = s[start:end]
+block = block.replace(
+    'DEVICE_DTS := mt7986a-ruijie-rg-x60\n',
+    'DEVICE_DTS := mt7986a-ruijie-rg-x60-107m\n'
+)
+s = s[:start] + block + s[end:]
+p.write_text(s)
+print("DEVICE_DTS 已替换为 mt7986a-ruijie-rg-x60-107m")
 PY
 
-# X30E / X30E Pro 的 image 定义。两者都使用 NAND UBI，DTS 中的 ubi 分区为 0x6F80000。
+echo "==== 添加 X30E / X30E Pro 设备定义 ===="
 if ! grep -q 'define Device/ruijie_rg-x30e$' "${IMAGE_MK}"; then
 cat >> "${IMAGE_MK}" <<'EOF'
 
@@ -74,7 +78,6 @@ define Device/ruijie_rg-x30e
 endef
 TARGET_DEVICES += ruijie_rg-x30e
 
-
 define Device/ruijie_rg-x30e-pro
   DEVICE_VENDOR := Ruijie
   DEVICE_MODEL := RG-X30E Pro
@@ -89,24 +92,30 @@ define Device/ruijie_rg-x30e-pro
 endef
 TARGET_DEVICES += ruijie_rg-x30e-pro
 EOF
+echo "已添加 X30E / X30E Pro 设备定义"
+else
+  echo "X30E 设备定义已存在，跳过"
 fi
 
-# X60 107M DTS 使用独立 compatible，因此补充网络初始化匹配。
+echo "==== 补充网络配置匹配 ===="
 if ! grep -q 'ruijie,rg-x60-107m' "${NETWORK_FILE}"; then
 python3 - "${NETWORK_FILE}" <<'PY'
 from pathlib import Path
-p=Path(__import__('sys').argv[1])
-s=p.read_text()
-needle='\truijie,rg-x60|\\\n'
+p = Path(__import__('sys').argv[1])
+s = p.read_text()
+needle = '\truijie,rg-x60|\\\n'
 if needle not in s:
     raise SystemExit('rg-x60 network case not found')
-s=s.replace(needle, '\truijie,rg-x60|\\\n\truijie,rg-x60-107m|\\\n', 1)
+s = s.replace(needle, '\truijie,rg-x60|\\\n\truijie,rg-x60-107m|\\\n', 1)
 p.write_text(s)
+print("已添加 ruijie,rg-x60-107m 网络匹配")
 PY
+else
+  echo "网络匹配已存在，跳过"
 fi
 
-echo '==== Ruijie DTS / image patch 完成 ===='
-echo 'X60  : mt7986a-ruijie-rg-x60-107m.dts'
-echo 'X60P : mt7986a-ruijie-rg-x60-pro.dts'
-echo 'X30E : mt7981b-ruijie-rg-x30e.dts'
-echo 'X30EP: mt7981b-ruijie-rg-x30e-pro.dts'
+echo "==== Ruijie 设备补丁完成 ===="
+echo "X60-107M : mt7986a-ruijie-rg-x60-107m.dts + base.dtsi"
+echo "X60-Pro  : mt7986a-ruijie-rg-x60-pro.dts + pro.dtsi"
+echo "X30E     : mt7981b-ruijie-rg-x30e.dts"
+echo "X30E-Pro : mt7981b-ruijie-rg-x30e-pro.dts"
