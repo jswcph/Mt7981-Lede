@@ -1,7 +1,7 @@
 #!/bin/bash
 #=================================================
 # part1.sh
-# ImmortalWrt + PassWall + OpenClash + Mihomo Meta
+# ImmortalWrt + PassWall + OpenClash + Mihomo Meta + iStore
 #=================================================
 set -e
 
@@ -172,6 +172,7 @@ src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
 src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
+src-git istore https://github.com/linkease/istore;main
 EOF
 
 echo ">>> 自定义 Feeds:"
@@ -179,14 +180,18 @@ echo "    PassWall"
 echo "    PassWall Packages"
 echo "    OpenClash"
 echo "    Argon Theme"
+echo "    iStore"
 
 #=================================================
-# iStore 已禁用
+# iStore：使用官方 main 分支
+# ImmortalWrt master / 25.12 系列按 iStore 官方集成方式处理
+# 只安装 luci-app-store，不把 iStore 仓库全部加入默认软件包
 #=================================================
 
-#echo "==== 添加 iStore 商店 ===="
-#rm -rf package/istore
-#git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
+echo "==== 安装 iStore Feed ===="
+
+./scripts/feeds update istore
+./scripts/feeds install -d y -p istore luci-app-store
 
 
 #=================================================
@@ -211,10 +216,8 @@ git clone \
 echo ">>> Mihomo Meta 源码准备完成"
 
 cd "${SRC_DIR}/mihomo"
-
 echo ">>> Mihomo Git 分支:"
 git branch --show-current
-
 echo ">>> Mihomo Commit:"
 git rev-parse --short HEAD
 
@@ -238,7 +241,6 @@ go mod download
 # 输出:
 #   ${SRC_DIR}/clash_meta
 #=================================================
-
 echo "==== 编译 Mihomo Meta ARM64 核心 ===="
 
 CGO_ENABLED=0 \
@@ -254,7 +256,6 @@ go build \
 #=================================================
 # 检查编译结果
 #=================================================
-
 echo "==== 检查 Mihomo 核心 ===="
 
 if [ ! -f "${SRC_DIR}/clash_meta" ]; then
@@ -267,7 +268,6 @@ file "${SRC_DIR}/clash_meta"
 
 echo ">>> 文件大小:"
 ls -lh "${SRC_DIR}/clash_meta"
-
 echo ">>> 检查 ARM64 ELF 架构:"
 
 if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
@@ -283,7 +283,6 @@ echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
 #=================================================
 # 安装到 OpenClash 核心目录
 #=================================================
-
 echo "==== 安装 Mihomo 到 OpenClash 核心目录 ===="
 
 mkdir -p \
@@ -300,7 +299,6 @@ chmod 0755 \
 #=================================================
 # 检查 OpenClash Meta 核心
 #=================================================
-
 echo "==== 检查 OpenClash Meta 核心 ===="
 
 if [ ! -f "${SRC_DIR}/files/etc/openclash/core/clash_meta" ]; then
@@ -315,14 +313,12 @@ ls -lh \
 echo ">>> 核心架构:"
 file \
   "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
 echo "==== Mihomo Meta 核心准备完成 ===="
 
 
 #=================================================
 # [5/5] 更新并安装所有 Feeds
 #=================================================
-
 echo "==== [5/5] 更新并安装所有 Feeds ===="
 
 cd "${SRC_DIR}"
@@ -342,18 +338,14 @@ find "${SRC_DIR}/package" \
 #=================================================
 # 完成
 #=================================================
-
 echo "==============================================="
 echo "       part1.sh 执行完毕"
 echo "==============================================="
 
 echo ">>> ImmortalWrt 源码:"
 echo "${SRC_DIR}"
-
 echo ">>> Mihomo 核心:"
 echo "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
 echo ">>> Go:"
 go version
-
 echo ">>> part1.sh 完成"
