@@ -163,13 +163,6 @@
 	};
 };
 
-&hnat {
-	mtketh-wan = "eth1";
-	mtketh-lan = "lan";
-	mtketh-max-gmac = <2>;
-	status = "okay";
-};
-
 &spi0 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi_flash_pins>;
