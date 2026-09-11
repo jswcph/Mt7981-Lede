@@ -23,6 +23,8 @@ on:
           - jcg_q30-pro
           - cmcc_xr30-nand
           - xiaomi_redmi-router-ax6000
+          - ruijie_rg-x30e
+          - ruijie_rg-x30e-pro
       repo_url:
         description: '源码仓库地址（默认为 coolsnowwolf/lede，找不到设备可换成 immortalwrt）'
         required: false
@@ -48,7 +50,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000","ruijie_rg-x30e","ruijie_rg-x30e-pro"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
@@ -93,13 +95,20 @@ jobs:
           haskell: true
           large-packages: true
           docker-images: true
-          swap-storage: false           
+          swap-storage: false
 
       - name: part1 - 准备编译环境与源码
         run: |
           chmod +x scripts/part1.sh
           cd "$WORKDIR" || true
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+
+      - name: 导入锐捷 X30E / X30E Pro DTS 与镜像定义
+        run: |
+          chmod +x scripts/import-ruijie-x30.sh
+          bash "$GITHUB_WORKSPACE/scripts/import-ruijie-x30.sh"
         env:
           SRC_DIR: ${{ env.WORKDIR }}/openwrt
 
@@ -120,14 +129,12 @@ jobs:
         run: |
           cd "$WORKDIR/openwrt"
           echo "使用 2 线程编译，设备：$DEVICE"
-          # 方案1：直接 V=sc 减少日志输出，避免通信堵塞
           make -j2 V=sc
-          # 如果失败，降级到单线程（不输出详细日志）
           if [ $? -ne 0 ]; then
             echo "2线程编译失败，降级为单线程..."
             make -j1 V=sc
           fi
-        timeout-minutes: 300  # 5小时超时保护
+        timeout-minutes: 300
 
       - name: 整理固件产物
         run: |
