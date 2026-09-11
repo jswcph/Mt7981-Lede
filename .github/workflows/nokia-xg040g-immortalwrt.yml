@@ -136,8 +136,7 @@ jobs:
             echo "多线程编译失败，降级为单线程..."
             make -j1 V=sc
           fi
-          timeout-minutes: 300
-
+        
       - name: 整理固件产物
         run: |
           set -e
