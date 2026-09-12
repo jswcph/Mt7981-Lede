@@ -101,14 +101,7 @@ jobs:
           REPO_URL: ${{ env.REPO_URL }}
           REPO_BRANCH: ${{ env.REPO_BRANCH }}
 
-      - name: 注入锐捷 DTS / DTSI 与镜像定义
-        run: |
-          chmod +x scripts/ruijie-device-patch.sh
-          bash "$GITHUB_WORKSPACE/scripts/ruijie-device-patch.sh"
-        env:
-          SRC_DIR: ${{ env.WORKDIR }}/openwrt
-          DEVICE: ${{ matrix.device }}
-
+     
       - name: part2 - 写入通用配置 + 锐捷设备配置
         run: |
           chmod +x scripts/part2.sh
