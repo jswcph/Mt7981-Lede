@@ -60,7 +60,7 @@ jobs:
       - name: 检出 Ruijie 构建配置
         uses: actions/checkout@v4
         with:
-          ref: ruijie-series
+          ref: Reijie-openwrt
           fetch-depth: 1
 
       - name: 释放磁盘空间
@@ -198,7 +198,7 @@ jobs:
       - name: 检出 Ruijie 构建配置
         uses: actions/checkout@v4
         with:
-          ref: ruijie-series
+          ref: Reijie-openwrt
           fetch-depth: 1
 
       - name: 下载所有固件 Artifact
