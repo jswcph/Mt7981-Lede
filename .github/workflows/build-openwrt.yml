@@ -104,13 +104,6 @@ jobs:
         env:
           SRC_DIR: ${{ env.WORKDIR }}/openwrt
 
-      - name: 导入锐捷 X30E / X30E Pro DTS 与镜像定义
-        run: |
-          chmod +x scripts/import-ruijie-x30.sh
-          bash "$GITHUB_WORKSPACE/scripts/import-ruijie-x30.sh"
-        env:
-          SRC_DIR: ${{ env.WORKDIR }}/openwrt
-
       - name: part2 - 写入设备与个性化配置
         run: |
           chmod +x scripts/part2.sh
