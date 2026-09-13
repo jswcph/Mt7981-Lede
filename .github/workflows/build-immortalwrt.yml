@@ -1,4 +1,4 @@
-name: Build OpenWrt Firmware
+name: Build immortalwrt mtk798x
 
 on:
   schedule:
