@@ -32,7 +32,7 @@ on:
       repo_branch:
         description: '源码分支'
         required: false
-        default: 'master'
+        default: 'openwrt-24.10'
 
 env:
   TZ: Asia/Shanghai
@@ -63,7 +63,7 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
-      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'master' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
       DEVICE: ${{ matrix.device }}
     steps:
       - name: 检出本仓库
