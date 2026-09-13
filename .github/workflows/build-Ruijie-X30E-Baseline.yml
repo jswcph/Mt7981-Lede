@@ -1,0 +1,198 @@
+name: Build Ruijie X30E X30E Pro Baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的锐捷设备'
+        required: true
+        type: choice
+        default: ruijie_rg-x30e
+        options:
+          - ruijie_rg-x30e
+          - ruijie_rg-x30e-pro
+          - all
+
+  schedule:
+    - cron: '0 19 * * 6'
+
+env:
+  TZ: Asia/Shanghai
+  REPO_URL: https://github.com/RuijieNetworksCommunity/MT798X-6.6-24.10
+  REPO_BRANCH: openwrt-24.10-6.6
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 设置构建矩阵
+        id: set-matrix
+        shell: bash
+        run: |
+          INPUT_DEVICE='${{ github.event.inputs.device }}'
+          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
+            MATRIX='{"device":["ruijie_rg-x30e","ruijie_rg-x30e-pro"]}'
+          else
+            MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
+          fi
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "构建矩阵：$MATRIX"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出构建配置
+        uses: actions/checkout@v4
+        with:
+          ref: ruijie-x30e-verified
+          fetch-depth: 1
+
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+
+      - name: 调整工作目录
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown $USER:$USER /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: 清理 Ubuntu 大型软件包
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: part1 - 准备锐捷 ImmortalWrt 6.6 源码
+        run: |
+          chmod +x scripts/part1.sh
+          cd "$WORKDIR"
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          REPO_URL: ${{ env.REPO_URL }}
+          REPO_BRANCH: ${{ env.REPO_BRANCH }}
+
+      - name: 验证 X30E/X30E Pro 硬件支持
+        run: |
+          set -e
+          cd "$WORKDIR/openwrt"
+          echo '==============================================='
+          echo '验证锐捷 X30E / X30E Pro 硬件源码'
+          echo '==============================================='
+
+          test -f target/linux/mediatek/dts/mt7981b-ruijie-rg-x30-base.dtsi
+          test -f target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dtsi
+          test -f target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dts
+          test -f target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dtsi
+          test -f target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts
+
+          echo '>>> DTS 文件全部存在'
+          grep -R -n '0x880000 0x6F80000' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dts
+          grep -R -n '0x880000 0x6F80000' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts
+
+          echo '>>> X30E SPI NAND：1-bit'
+          grep -n 'spi-tx-bus-width = <1>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dtsi
+          grep -n 'spi-rx-bus-width = <1>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dtsi
+
+          echo '>>> X30E Pro SPI NAND：4-bit'
+          grep -n 'spi-tx-bus-width = <4>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dtsi
+          grep -n 'spi-rx-bus-width = <4>' target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dtsi
+
+          echo '>>> DTS 依赖关系'
+          head -8 target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dts
+          head -8 target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts
+
+      - name: part2 - 写入当前项目配置
+        run: |
+          chmod +x scripts/part2.sh
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+        env:
+          SRC_DIR: ${{ env.WORKDIR }}/openwrt
+          DEVICE: ${{ matrix.device }}
+
+      - name: 校验最终目标配置
+        run: |
+          set -e
+          cd "$WORKDIR/openwrt"
+          echo '==============================================='
+          echo "最终设备：$DEVICE"
+          echo '==============================================='
+          grep -E '^CONFIG_TARGET_mediatek|^CONFIG_TARGET.*DEVICE' .config
+          echo '>>> DTS：'
+          case "$DEVICE" in
+            ruijie_rg-x30e)
+              grep -n 'mt7981b-ruijie-rg-x30e' .config target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e.dts
+              ;;
+            ruijie_rg-x30e-pro)
+              grep -n 'mt7981b-ruijie-rg-x30e-pro' .config target/linux/mediatek/dts/mt7981b-ruijie-rg-x30e-pro.dts
+              ;;
+          esac
+
+      - name: 下载编译依赖
+        run: |
+          cd "$WORKDIR/openwrt"
+          make download -j4
+          find dl -size -1024c -exec rm -f {} \;
+
+      - name: 编译固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          set +e
+          make -j2 V=sc
+          RC=$?
+          if [ "$RC" -ne 0 ]; then
+            echo '2线程失败，改用单线程重新编译'
+            make -j1 V=sc
+            RC=$?
+          fi
+          exit "$RC"
+        timeout-minutes: 300
+
+      - name: 整理固件
+        run: |
+          set -e
+          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          cd "$WORKDIR/openwrt/bin/targets"
+          find . -type f \( \
+            -iname '*sysupgrade*' -o \
+            -iname '*factory*' -o \
+            -iname '*recovery*' -o \
+            -iname '*.itb' -o \
+            -iname '*.img.gz' -o \
+            -iname '*.bin' \
+          \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+          cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
+          echo '===== 固件文件 ====='
+          find "$GITHUB_WORKSPACE/firmware/${DEVICE}" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传固件 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
