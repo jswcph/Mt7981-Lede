@@ -25,13 +25,13 @@ on:
           - xiaomi_redmi-router-ax6000
           
       repo_url:
-        description: '源码仓库地址（默认为 coolsnowwolf/lede，找不到设备可换成 immortalwrt）'
+        description: '源码仓库地址（ coolsnowwolf/lede，找不到设备可换成 immortalwrt/immortalwrt）'
         required: false
         default: 'https://github.com/immortalwrt/immortalwrt'
       repo_branch:
         description: '源码分支'
         required: false
-        default: 'immortalwrt-mt798x-24.10'
+        default: 'openwrt-24.10'
 
 env:
   TZ: Asia/Shanghai
