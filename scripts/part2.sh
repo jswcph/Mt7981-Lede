@@ -59,9 +59,24 @@ else
   echo "警告：未找到预编译的 clash_meta，跳过内核写入"
 fi
 
-echo "==== 执行 make defconfig 解析依赖 ===="
+echo "==== 执行  解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
+
+echo "==== 强制确认核心软件包 ===="
+
+cat >> .config <<'EOF'
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
+CONFIG_PACKAGE_luci-i18n-opkg-zh-cn=y
+CONFIG_PACKAGE_luci-app-store=y
+EOF
+
+make defconfig
+
+echo "==== 最终核心软件包检查 ===="
+
+grep -E '^CONFIG_PACKAGE_(luci-i18n-base-zh-cn|luci-i18n-firewall-zh-cn|luci-i18n-opkg-zh-cn|luci-app-store)=' .config || true
 
 #=================================================
 # Nokia XG-040G-MD/MF 无无线硬件
