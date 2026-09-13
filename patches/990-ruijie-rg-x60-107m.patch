@@ -1,0 +1,10 @@
+--- a/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi
++++ b/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi
+@@ -136,7 +136,7 @@
+ 			partition@680000 {
+ 				label = "ubi";
+-				reg = <0x680000 0x3f00000>;
++				reg = <0x680000 0x6b00000>;
+ 				compatible = "linux,ubi";
+ 			};
+ 		};
