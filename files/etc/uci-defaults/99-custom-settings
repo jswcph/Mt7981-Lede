@@ -1,43 +1,106 @@
 #!/bin/sh
-# 首次开机自动执行一次：写入主机名/LAN地址/网口分配/WiFi名称/默认密码/主题/语言
+
+#=================================================
+# Nokia XG-040G 首次启动默认配置
+#=================================================
+
+#=================================================
 # 主机名
+#=================================================
+
 uci set system.@system[0].hostname='OpenWrt'
-# 缩小系统日志内存缓冲区（默认64，纯路由+科学上网场景32~48够用，省内存）
+
+#=================================================
+# 日志
+#=================================================
+
 uci set system.@system[0].log_size='32'
 
-# 网口：lan1 = WAN，lan2/lan3/lan4 = LAN
-# Nokia XG-040G-MD/MF 的 ImmortalWrt board.d 默认将 lan1~lan4 放入 LAN，
-# 这里覆盖为 lan1=WAN、lan2~lan4=LAN。
+#=================================================
+# 删除旧 WAN / LAN 配置
+#=================================================
+
 uci -q delete network.wan
+uci -q delete network.lan
+
+# 删除旧 br-lan
+uci -q delete network.br_lan
+
+#=================================================
+# WAN
+# lan1 = WAN
+#=================================================
+
 uci set network.wan='interface'
 uci set network.wan.device='lan1'
 uci set network.wan.proto='dhcp'
 
-uci -q delete network.lan
+#=================================================
+# LAN
+# lan2 / lan3 / lan4
+#=================================================
+
 uci set network.lan='interface'
 uci set network.lan.device='br-lan'
 uci set network.lan.proto='static'
 uci set network.lan.ipaddr='192.168.6.1'
 uci set network.lan.netmask='255.255.255.0'
 
-uci -q delete network.br_lan
+#=================================================
+# br-lan
+# 强制只包含 lan2 / lan3 / lan4
+#=================================================
+
 uci set network.br_lan='device'
 uci set network.br_lan.type='bridge'
+
 uci add_list network.br_lan.ports='lan2'
 uci add_list network.br_lan.ports='lan3'
 uci add_list network.br_lan.ports='lan4'
 
+#=================================================
+# 默认密码
+#=================================================
 
-
-# 默认密码：password（登录/SSH）
 (echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
 
-# 默认主题：Argon
+#=================================================
+# Argon
+#=================================================
+
 uci set luci.main.mediaurlbase='/luci-static/argon'
+
+#=================================================
 # 默认语言：简体中文
+#=================================================
+
 uci set luci.main.lang='zh_cn'
+
+#=================================================
+# 提交配置
+#=================================================
 
 uci commit system
 uci commit network
 uci commit luci
+
+#=================================================
+# 最终检查
+#=================================================
+
+echo "==============================================="
+echo " Nokia XG-040G 默认网络配置完成"
+echo "==============================================="
+
+echo "WAN:"
+uci show network.wan
+
+echo "LAN:"
+uci show network.lan
+
+echo "BR-LAN:"
+uci show network.br_lan
+
+echo "==============================================="
+
 exit 0
