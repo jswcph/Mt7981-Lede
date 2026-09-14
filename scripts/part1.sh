@@ -162,25 +162,33 @@ echo "${SRC_DIR}"
 
 
 #=================================================
-# 锐捷 RG-X60 Pro DTS 分区表补丁
-# 上游 DTS 里 ubi 分区默认是 0x3f00000 (63MiB)
+# 锐捷 RG-X60 / RG-X60 Pro DTS 分区表补丁
+# 上游 ubi 分区默认是 0x3f00000 (63MiB)
 # 这里改成 0x6b00000 (107MiB)，充分利用 Flash 空间
-# 只有当 DTS 文件存在时才打补丁，不影响其他机型
+#
+# 说明：x60 和 x60-pro 两个型号在 immortalwrt 中
+# 共用同一份 mt7986a-ruijie-rg-x60.dtsi 定义分区表，
+# 因此只需打补丁一次即可同时对两个型号生效。
+#
+# immortalwrt/immortalwrt (openwrt-24.10) 真实路径：
+#   target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi
 #=================================================
 
-RUIJIE_X60_PRO_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
+RUIJIE_X60_DTSI="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi"
 
-if [ -f "${RUIJIE_X60_PRO_DTS}" ]; then
-  echo "==== 补丁：扩大 Ruijie RG-X60 Pro 的 ubi 分区 ===="
+if [ -f "${RUIJIE_X60_DTSI}" ]; then
+  echo "==== 补丁：扩大 Ruijie RG-X60 / X60 Pro 共用的 ubi 分区 ===="
 
   sed -i \
     's/reg = <0x680000 0x3f00000>;/reg = <0x680000 0x6b00000>;/' \
-    "${RUIJIE_X60_PRO_DTS}"
+    "${RUIJIE_X60_DTSI}"
 
   echo ">>> 补丁后的分区行："
-  grep -n 'reg = <0x680000' "${RUIJIE_X60_PRO_DTS}"
+  if ! grep -n 'reg = <0x680000' "${RUIJIE_X60_DTSI}"; then
+    echo ">>> 警告：未匹配到目标分区行，请检查该文件的分区定义是否已变化" >&2
+  fi
 else
-  echo "==== 未找到 Ruijie RG-X60 Pro 的 DTS，跳过补丁 ===="
+  echo "==== 未找到 ${RUIJIE_X60_DTSI}，跳过补丁 ===="
 fi
 
 
