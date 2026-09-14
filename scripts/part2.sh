@@ -1,72 +1,107 @@
 #!/bin/bash
 #=================================================
-# part2.sh
-# 功能：合并 通用配置 + 设备配置生成最终 .config
-#       写入默认系统设置覆盖目录 files/
-#       执行 defconfig 解析依赖
+# part2.sh - Nokia XG-040G ImmortalWrt
+# 统一生成最终 .config、写入 files、执行一次 defconfig
+# ImmortalWrt master 使用 APK；旧 OPKG LuCI 配置不再使用。
 #=================================================
 set -e
 
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
-BASE_DIR="$GITHUB_WORKSPACE"   # 仓库根目录（本地调试可自行改成绝对路径）
-[ -z "$BASE_DIR" ] && BASE_DIR="$(pwd)"
+BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
 
-if [ -z "${DEVICE}" ]; then
-  echo "错误：未指定 DEVICE 环境变量"
-  exit 1
-fi
-
+[ -n "${DEVICE:-}" ] || { echo "ERROR: 未指定 DEVICE"; exit 1; }
 DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
-if [ ! -f "${DEVICE_CONFIG}" ]; then
-  echo "错误：找不到设备配置文件 ${DEVICE_CONFIG}"
-  echo "请检查 config/devices/ 目录下是否有对应的 .config 文件"
-  exit 1
-fi
+[ -f "${DEVICE_CONFIG}" ] || { echo "ERROR: 找不到 ${DEVICE_CONFIG}"; exit 1; }
+[ -d "${SRC_DIR}" ] || { echo "ERROR: 源码目录不存在 ${SRC_DIR}"; exit 1; }
 
-echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
-cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
-echo "==== 写入默认系统设置覆盖目录 files/ ===="
-rm -rf "${SRC_DIR}/files"
-mkdir -p "${SRC_DIR}/files"
-cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
-find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
-
-
-echo "==== 写回预编译的 Mihomo Meta 核心 ===="
-mkdir -p "${SRC_DIR}/files/etc/openclash/core"
-if [ -f "${SRC_DIR}/clash_meta" ]; then
-  cp "${SRC_DIR}/clash_meta" "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-else
-  echo "警告：未找到预编译的 clash_meta，跳过内核写入"
-fi
-
-echo "==== 执行  解析依赖 ===="
 cd "${SRC_DIR}"
-make defconfig
+echo "==== part2: ${DEVICE} ===="
 
-echo "==== 强制确认核心软件包 ===="
+#-------------------------------------------------
+# 1. 生成配置：所有配置一次性写入，defconfig 只执行一次
+#-------------------------------------------------
+echo "==== [1/4] 合并 base + device 配置 ===="
+cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
 cat >> .config <<'EOF'
-CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
-CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
-CONFIG_PACKAGE_luci-i18n-opkg-zh-cn=y
+
+# ImmortalWrt master / APK package manager
+CONFIG_USE_APK=y
+CONFIG_PACKAGE_apk-openssl=y
+# CONFIG_PACKAGE_opkg is not set
+
+# LuCI package manager（APK 时代替代旧 luci-app-opkg）
+CONFIG_PACKAGE_luci-app-package-manager=y
+CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
+# CONFIG_PACKAGE_luci-app-opkg is not set
+# CONFIG_PACKAGE_luci-i18n-opkg-zh-cn is not set
+
+# LuCI 简体中文：LuCI 内部语言名 zh_Hans，安装后别名为 zh-cn
+CONFIG_LUCI_LANG_zh_Hans=y
+
+# iStore
 CONFIG_PACKAGE_luci-app-store=y
 EOF
 
+#-------------------------------------------------
+# 2. files overlay
+#-------------------------------------------------
+echo "==== [2/4] 准备 files/ ===="
+rm -rf "${SRC_DIR}/files"
+mkdir -p "${SRC_DIR}/files"
+cp -a "${BASE_DIR}/files/." "${SRC_DIR}/files/"
+
+if [ -d "${SRC_DIR}/files/etc/uci-defaults" ]; then
+  find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
+fi
+
+MIHOMO_SRC="${SRC_DIR}/clash_meta"
+MIHOMO_DST="${SRC_DIR}/files/etc/openclash/core/clash_meta"
+[ -f "${MIHOMO_SRC}" ] || { echo "ERROR: 找不到 ${MIHOMO_SRC}"; exit 1; }
+mkdir -p "$(dirname "${MIHOMO_DST}")"
+cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
+chmod 0755 "${MIHOMO_DST}"
+
+#-------------------------------------------------
+# 3. 最终依赖解析：只执行一次
+#-------------------------------------------------
+echo "==== [3/4] make defconfig ===="
 make defconfig
 
-echo "==== 最终核心软件包检查 ===="
+#-------------------------------------------------
+# 4. 最终检查
+#-------------------------------------------------
+echo "==== [4/4] 检查最终 .config ===="
 
-grep -E '^CONFIG_PACKAGE_(luci-i18n-base-zh-cn|luci-i18n-firewall-zh-cn|luci-i18n-opkg-zh-cn|luci-app-store)=' .config || true
+grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store))=' .config || true
 
-#=================================================
-# Nokia XG-040G-MD/MF 无无线硬件
-# make defconfig 可能根据 target/default 依赖重新选择无线组件，
-# 因此在 defconfig 后再次强制关闭无线相关用户空间组件和驱动包。
-#=================================================
+check_y() {
+  grep -q "^$1=y$" .config || { echo "ERROR: $1 未进入最终 .config"; exit 1; }
+  echo "OK: $1=y"
+}
+
+check_off() {
+  if grep -q "^$1=" .config; then
+    echo "ERROR: $1 仍启用"
+    exit 1
+  fi
+  echo "OK: $1 disabled"
+}
+
+check_y CONFIG_USE_APK
+check_y CONFIG_PACKAGE_apk-openssl
+check_y CONFIG_PACKAGE_luci-app-package-manager
+check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
+check_y CONFIG_LUCI_LANG_zh_Hans
+check_y CONFIG_PACKAGE_luci-app-store
+check_off CONFIG_PACKAGE_opkg
+check_off CONFIG_PACKAGE_luci-app-opkg
+check_off CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
+
+# Nokia XG-040G 无 Wi-Fi 硬件。
+# 必须在最后一次 defconfig 后关闭，不能再 defconfig，否则又可能被依赖选回。
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
-  echo "==== Nokia XG-040G：强制关闭无线驱动/无线管理组件 ===="
+  echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
   for sym in \
     CONFIG_PACKAGE_wpad-openssl \
     CONFIG_PACKAGE_wifi-scripts \
@@ -83,9 +118,12 @@ if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; t
     sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
     echo "# ${sym} is not set" >> .config
   done
-
-  echo "==== 无线配置最终检查 ===="
-  grep -E '^(CONFIG_PACKAGE_(wpad|wifi-scripts|wireless-regdb)|CONFIG_PACKAGE_kmod-(cfg80211|mac80211|mt76|mt7915|mt7916|mt7996))' .config || true
 fi
 
-echo ">>> part2.sh 执行完毕，当前编译设备：${DEVICE}"
+echo "==== part2 完成 ===="
+echo "DEVICE: ${DEVICE}"
+echo "iStore: luci-app-store"
+echo "LuCI 中文：LUCI_LANG_zh_Hans + luci-i18n-package-manager-zh-cn"
+echo "APK: CONFIG_USE_APK=y"
+echo "Mihomo: ${MIHOMO_DST}"
+ls -lh "${MIHOMO_DST}"
