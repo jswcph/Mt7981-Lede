@@ -1,7 +1,13 @@
 #!/bin/bash
 #=================================================
 # part1.sh
-# ImmortalWrt + PassWall + OpenClash + Mihomo Meta + iStore
+# ImmortalWrt 源码 + Feeds + Mihomo Meta
+#
+# 原则：
+#   1. ImmortalWrt master 使用 APK 包管理体系
+#   2. iStore 按官方方式单独处理，只安装 luci-app-store
+#   3. Feeds 只注册/安装本项目实际需要的软件包
+#   4. 不在这里处理 .config，配置统一交给 part2.sh
 #=================================================
 set -e
 
@@ -9,165 +15,70 @@ REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
 REPO_BRANCH="${REPO_BRANCH:-master}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 
-echo "==============================================="
-echo "       ImmortalWrt Build Environment"
-echo "==============================================="
-
 #=================================================
-# [1/5] 安装编译依赖
+# [1/4] 编译环境
 #=================================================
+echo "==============================================="
+echo "  ImmortalWrt Build Environment"
+echo "==============================================="
+echo "源码：${REPO_URL}"
+echo "分支：${REPO_BRANCH}"
 
-echo "==== [1/5] 安装编译依赖 ===="
-
+echo "==== [1/4] 安装编译依赖 ===="
 sudo -E apt-get -qq update
-
 sudo -E apt-get -qq install -y \
-  ack \
-  antlr3 \
-  aria2 \
-  asciidoc \
-  autoconf \
-  automake \
-  autopoint \
-  binutils \
-  bison \
-  build-essential \
-  bzip2 \
-  ccache \
-  cmake \
-  cpio \
-  curl \
-  device-tree-compiler \
-  fastjar \
-  flex \
-  gawk \
-  gettext \
-  gcc-multilib \
-  g++-multilib \
-  git \
-  gperf \
-  haveged \
-  help2man \
-  intltool \
-  libc6-dev-i386 \
-  libelf-dev \
-  libglib2.0-dev \
-  libgmp3-dev \
-  libltdl-dev \
-  libmpc-dev \
-  libmpfr-dev \
-  libncurses5-dev \
-  libncursesw5-dev \
-  libreadline-dev \
-  libssl-dev \
-  libtool \
-  lrzsz \
-  mkisofs \
-  msmtp \
-  ninja-build \
-  p7zip \
-  p7zip-full \
-  patch \
-  pkgconf \
-  python3 \
-  python3-pip \
-  libpython3-dev \
-  python3-ply \
-  python3-docutils \
-  qtbase5-dev \
-  rsync \
-  scons \
-  squashfs-tools \
-  subversion \
-  swig \
-  texinfo \
-  unzip \
-  vim \
-  wget \
-  xmlto \
-  xxd \
-  zlib1g-dev
+  ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison \
+  build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar \
+  flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man \
+  intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+  libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev \
+  libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch \
+  pkgconf python3 python3-pip libpython3-dev python3-ply python3-docutils \
+  qtbase5-dev rsync scons squashfs-tools subversion swig texinfo unzip \
+  vim wget xmlto xxd zlib1g-dev
 
 sudo timedatectl set-timezone "Asia/Shanghai" || true
 
-
 #=================================================
-# 安装独立 Go 环境
-# 不使用 Ubuntu 自带的旧版 Go
+# Go：Mihomo Meta 编译使用独立 Go
 #=================================================
-
-echo "==== 安装 Go 编译环境 ===="
-
-GO_VERSION="1.25.1"
+echo "==== 安装 Go ${GO_VERSION:-1.25.1} ===="
+GO_VERSION="${GO_VERSION:-1.25.1}"
 GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-GO_URL="https://go.dev/dl/${GO_TARBALL}"
-
-echo ">>> Go 版本: ${GO_VERSION}"
 
 rm -f "/tmp/${GO_TARBALL}"
-
-wget -q \
-  "${GO_URL}" \
-  -O "/tmp/${GO_TARBALL}"
-
+wget -q "https://go.dev/dl/${GO_TARBALL}" -O "/tmp/${GO_TARBALL}"
 sudo rm -rf /usr/local/go
-
-sudo tar \
-  -C /usr/local \
-  -xzf "/tmp/${GO_TARBALL}"
-
+sudo tar -C /usr/local -xzf "/tmp/${GO_TARBALL}"
 rm -f "/tmp/${GO_TARBALL}"
 
 export PATH="/usr/local/go/bin:${PATH}"
-
-echo "==== 检查 Go 环境 ===="
-
-echo ">>> Go 路径:"
-which go
-
-echo ">>> Go 版本:"
+command -v go
 go version
 
-GO_BIN="$(which go)"
-
-if [ "${GO_BIN}" != "/usr/local/go/bin/go" ]; then
-    echo "ERROR: 当前使用的不是 /usr/local/go/bin/go"
-    echo "当前 Go: ${GO_BIN}"
-    exit 1
+if [ "$(command -v go)" != "/usr/local/go/bin/go" ]; then
+  echo "ERROR: 未使用 /usr/local/go/bin/go"
+  exit 1
 fi
 
-echo ">>> Go 环境检查通过"
-
-
 #=================================================
-# [2/5] 克隆 ImmortalWrt
+# [2/4] 获取 ImmortalWrt 源码
 #=================================================
-
-echo "==== [2/5] 克隆源码: ${REPO_URL} ===="
-echo "==== 分支: ${REPO_BRANCH} ===="
-
+echo "==== [2/4] 克隆 ImmortalWrt ===="
 rm -rf "${SRC_DIR}"
-
-git clone \
-  --depth=1 \
-  --single-branch \
-  --branch "${REPO_BRANCH}" \
-  "${REPO_URL}" \
-  "${SRC_DIR}"
-
+git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" \
+  "${REPO_URL}" "${SRC_DIR}"
 cd "${SRC_DIR}"
 
-echo ">>> ImmortalWrt 源码目录:"
-echo "${SRC_DIR}"
-
-
 #=================================================
-# [3/5] 写入自定义 Feeds
+# [3/4] Feeds
+#
+# iStore 是这里最重要的特殊项：
+# 官方集成方式就是注册 istore -> update istore ->
+# install luci-app-store，而不是把旧 opkg/iStore 配置混进 .config。
 #=================================================
-
-echo "==== [3/5] 安全写入自定义 Feeds ===="
-
-cat >> feeds.conf.default <<EOF
+echo "==== [3/4] 配置第三方 Feeds ===="
+cat >> feeds.conf.default <<'EOF'
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
@@ -175,177 +86,76 @@ src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
 src-git istore https://github.com/linkease/istore;main
 EOF
 
-echo ">>> 自定义 Feeds:"
-echo "    PassWall"
-echo "    PassWall Packages"
-echo "    OpenClash"
-echo "    Argon Theme"
-echo "    iStore"
+# 一次更新全部 feeds，避免重复 update。
+./scripts/feeds update -a
 
-#=================================================
-# iStore：使用官方 main 分支
-# ImmortalWrt master / 25.12 系列按 iStore 官方集成方式处理
-# 只安装 luci-app-store，不把 iStore 仓库全部加入默认软件包
-#=================================================
+# 只安装本项目实际使用的第三方 LuCI / 软件包。
+# 不执行 feeds install -a，避免把整套第三方 feed 无差别挂进源码树。
+./scripts/feeds install -d y -p passwall luci-app-passwall
+./scripts/feeds install -d y -p passwall_packages xray-core sing-box
+./scripts/feeds install -d y -p openclash luci-app-openclash
+./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-echo "==== 安装 iStore Feed ===="
-
-./scripts/feeds update istore
+# iStore：严格按照官方方式安装 luci-app-store。
 ./scripts/feeds install -d y -p istore luci-app-store
 
+# iStore 必须真正进入 feeds/package 链接树，否则后面的 defconfig 无法识别。
+if [ ! -f "package/feeds/istore/luci-app-store/Makefile" ]; then
+  echo "ERROR: iStore Feed 已更新，但 luci-app-store Makefile 不存在"
+  echo "请检查 istore feed 是否成功安装"
+  exit 1
+fi
+
+echo "==== Feeds 检查通过 ===="
+echo "iStore: package/feeds/istore/luci-app-store/Makefile"
+echo "PassWall: package/feeds/passwall/luci-app-passwall"
+echo "OpenClash: package/feeds/openclash/luci-app-openclash"
+echo "Argon: package/feeds/luci_theme_argon"
 
 #=================================================
-# [4/5] 编译 Mihomo Meta ARM64
+# [4/4] 编译 Mihomo Meta ARM64
 #=================================================
-
-echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
-
+echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
-
 rm -rf mihomo
 
-echo ">>> 克隆 Mihomo Meta 分支"
-
-git clone \
-  --depth=1 \
-  --single-branch \
-  --branch Meta \
-  https://github.com/MetaCubeX/mihomo.git \
-  mihomo
-
-echo ">>> Mihomo Meta 源码准备完成"
+git clone --depth=1 --single-branch --branch Meta \
+  https://github.com/MetaCubeX/mihomo.git mihomo
 
 cd "${SRC_DIR}/mihomo"
-echo ">>> Mihomo Git 分支:"
-git branch --show-current
-echo ">>> Mihomo Commit:"
-git rev-parse --short HEAD
-
-
-#=================================================
-# Mihomo Go 依赖
-#=================================================
-
-echo "==== 下载 Mihomo Go 依赖 ===="
+echo "Mihomo branch: $(git branch --show-current)"
+echo "Mihomo commit: $(git rev-parse --short HEAD)"
 
 go mod download
 
-
-#=================================================
-# 编译 Mihomo
-#
-# AX3000T:
-#   CPU: MT7981
-#   Architecture: ARM64 / AArch64
-#
-# 输出:
-#   ${SRC_DIR}/clash_meta
-#=================================================
-echo "==== 编译 Mihomo Meta ARM64 核心 ===="
-
-CGO_ENABLED=0 \
-GOOS=linux \
-GOARCH=arm64 \
-go build \
-  -tags with_gvisor \
-  -trimpath \
-  -ldflags "-s -w" \
-  -o "${SRC_DIR}/clash_meta"
-
-
-#=================================================
-# 检查编译结果
-#=================================================
-echo "==== 检查 Mihomo 核心 ===="
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+  go build \
+    -tags with_gvisor \
+    -trimpath \
+    -ldflags "-s -w" \
+    -o "${SRC_DIR}/clash_meta"
 
 if [ ! -f "${SRC_DIR}/clash_meta" ]; then
-    echo "ERROR: Mihomo 编译失败，找不到 clash_meta"
-    exit 1
+  echo "ERROR: Mihomo Meta 编译失败"
+  exit 1
 fi
-
-echo ">>> 文件信息:"
-file "${SRC_DIR}/clash_meta"
-
-echo ">>> 文件大小:"
-ls -lh "${SRC_DIR}/clash_meta"
-echo ">>> 检查 ARM64 ELF 架构:"
 
 if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
-    echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
-    exit 1
+  echo "ERROR: clash_meta 不是 ARM64/aarch64 ELF"
+  file "${SRC_DIR}/clash_meta"
+  exit 1
 fi
 
-echo ">>> Mihomo ARM64 核心编译成功"
-echo ">>> 当前 GitHub Runner 是 x86_64"
-echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
+mkdir -p "${SRC_DIR}/files/etc/openclash/core"
+cp "${SRC_DIR}/clash_meta" "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
 
-
-#=================================================
-# 安装到 OpenClash 核心目录
-#=================================================
-echo "==== 安装 Mihomo 到 OpenClash 核心目录 ===="
-
-mkdir -p \
-  "${SRC_DIR}/files/etc/openclash/core"
-
-cp \
-  "${SRC_DIR}/clash_meta" \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-chmod 0755 \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-
-#=================================================
-# 检查 OpenClash Meta 核心
-#=================================================
-echo "==== 检查 OpenClash Meta 核心 ===="
-
-if [ ! -f "${SRC_DIR}/files/etc/openclash/core/clash_meta" ]; then
-    echo "ERROR: OpenClash Meta 核心安装失败"
-    exit 1
-fi
-
-echo ">>> OpenClash Meta 核心:"
-ls -lh \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-echo ">>> 核心架构:"
-file \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-echo "==== Mihomo Meta 核心准备完成 ===="
-
-
-#=================================================
-# [5/5] 更新并安装所有 Feeds
-#=================================================
-echo "==== [5/5] 更新并安装所有 Feeds ===="
-
-cd "${SRC_DIR}"
-
-./scripts/feeds update -a
-
-./scripts/feeds install -a
-
-echo "==== 查找 Argon 源码目录 ===="
-
-find "${SRC_DIR}/package" \
-     "${SRC_DIR}/feeds" \
-     -maxdepth 5 \
-     -type d \
-     -iname "*argon*" \
-     2>/dev/null || true
 #=================================================
 # 完成
 #=================================================
 echo "==============================================="
-echo "       part1.sh 执行完毕"
+echo "  part1.sh 完成"
 echo "==============================================="
-
-echo ">>> ImmortalWrt 源码:"
-echo "${SRC_DIR}"
-echo ">>> Mihomo 核心:"
-echo "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-echo ">>> Go:"
+echo "ImmortalWrt：${SRC_DIR}"
+echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
-echo ">>> part1.sh 完成"
