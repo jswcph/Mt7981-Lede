@@ -181,12 +181,12 @@ echo "    OpenClash"
 echo "    Argon Theme"
 
 #=================================================
-# iStore 已禁用
+# iStore 
 #=================================================
 
-#echo "==== 添加 iStore 商店 ===="
-#rm -rf package/istore
-#git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
+echo "==== 添加 iStore 商店 ===="
+rm -rf package/istore
+git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
 
 
 #=================================================
