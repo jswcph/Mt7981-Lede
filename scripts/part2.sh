@@ -2,7 +2,7 @@
 #=================================================
 # part2.sh - Nokia XG-040G ImmortalWrt
 # 统一生成最终 .config、写入 files、执行一次 defconfig
-# ImmortalWrt master 使用 APK；旧 OPKG LuCI 配置不再使用。
+# ImmortalWrt master 使用 APK；不安装 iStore / 旧 opkg LuCI。
 #=================================================
 set -e
 
@@ -18,7 +18,7 @@ cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
 
 #-------------------------------------------------
-# 1. 生成配置：所有配置一次性写入，defconfig 只执行一次
+# 1. 合并配置
 #-------------------------------------------------
 echo "==== [1/4] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
@@ -30,17 +30,18 @@ CONFIG_USE_APK=y
 CONFIG_PACKAGE_apk-openssl=y
 # CONFIG_PACKAGE_opkg is not set
 
-# LuCI package manager（APK 时代替代旧 luci-app-opkg）
+# LuCI package manager（新版 APK/OPKG 通用软件包管理界面）
 CONFIG_PACKAGE_luci-app-package-manager=y
 CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 # CONFIG_PACKAGE_luci-app-opkg is not set
 # CONFIG_PACKAGE_luci-i18n-opkg-zh-cn is not set
 
-# LuCI 简体中文：LuCI 内部语言名 zh_Hans，安装后别名为 zh-cn
+# LuCI 简体中文
 CONFIG_LUCI_LANG_zh_Hans=y
 
-# iStore
-CONFIG_PACKAGE_luci-app-store=y
+# iStore：本项目明确不安装
+# CONFIG_PACKAGE_luci-app-store is not set
+# CONFIG_PACKAGE_luci-i18n-store-zh-cn is not set
 EOF
 
 #-------------------------------------------------
@@ -72,7 +73,6 @@ make defconfig
 # 4. 最终检查
 #-------------------------------------------------
 echo "==== [4/4] 检查最终 .config ===="
-
 grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store))=' .config || true
 
 check_y() {
@@ -81,7 +81,7 @@ check_y() {
 }
 
 check_off() {
-  if grep -q "^$1=" .config; then
+  if grep -q "^$1=y$\|^$1=m$" .config; then
     echo "ERROR: $1 仍启用"
     exit 1
   fi
@@ -93,10 +93,10 @@ check_y CONFIG_PACKAGE_apk-openssl
 check_y CONFIG_PACKAGE_luci-app-package-manager
 check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
 check_y CONFIG_LUCI_LANG_zh_Hans
-check_y CONFIG_PACKAGE_luci-app-store
 check_off CONFIG_PACKAGE_opkg
 check_off CONFIG_PACKAGE_luci-app-opkg
 check_off CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
+check_off CONFIG_PACKAGE_luci-app-store
 
 # Nokia XG-040G 无 Wi-Fi 硬件。
 # 必须在最后一次 defconfig 后关闭，不能再 defconfig，否则又可能被依赖选回。
@@ -122,8 +122,9 @@ fi
 
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
-echo "iStore: luci-app-store"
-echo "LuCI 中文：LUCI_LANG_zh_Hans + luci-i18n-package-manager-zh-cn"
+echo "iStore: disabled"
+echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
+echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
 echo "Mihomo: ${MIHOMO_DST}"
 ls -lh "${MIHOMO_DST}"
