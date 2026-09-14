@@ -72,16 +72,18 @@ git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" "${REPO_URL}" "${S
 cd "${SRC_DIR}"
 
 #=================================================
-# 锐捷 RG-X60 107MiB UBI 分区补丁
+# 锐捷 RG-X60 / RG-X60 Pro 107MiB UBI 分区补丁
 #=================================================
 # 上游文件：target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi
-# 只在选择 RG-X60 时应用，避免影响其他机型。
+# x60 和 x60-pro 两个型号的 .dts 都 include 这份 .dtsi，
+# 分区定义是共用的，所以只要选中了其中任意一个型号就需要打补丁。
+# 只在选择 RG-X60 / RG-X60 Pro 时应用，避免影响其他机型。
 #=================================================
 
-if [ "${DEVICE:-}" = "ruijie_rg-x60" ]; then
+if [ "${DEVICE:-}" = "ruijie_rg-x60" ] || [ "${DEVICE:-}" = "ruijie_rg-x60-pro" ]; then
     PATCH_FILE="${GITHUB_WORKSPACE}/patches/990-ruijie-rg-x60-107m.patch"
 
-    echo "==== 应用 Ruijie RG-X60 107MiB UBI 分区补丁 ===="
+    echo "==== 应用 Ruijie RG-X60 / X60 Pro 107MiB UBI 分区补丁 (当前设备: ${DEVICE}) ===="
 
     if [ ! -f "${PATCH_FILE}" ]; then
         echo "ERROR: 找不到补丁文件：${PATCH_FILE}"
@@ -97,7 +99,7 @@ if [ "${DEVICE:-}" = "ruijie_rg-x60" ]; then
     grep -q 'reg = <0x680000 0x6b00000>;' \
       "${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi"
 
-    echo ">>> RG-X60 107MiB UBI 分区补丁验证通过"
+    echo ">>> RG-X60 / X60 Pro 107MiB UBI 分区补丁验证通过"
 else
     echo "==== 当前设备 ${DEVICE:-未指定}，不应用 RG-X60 分区补丁 ===="
 fi
