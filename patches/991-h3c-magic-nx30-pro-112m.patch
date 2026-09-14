@@ -1,6 +1,6 @@
 --- a/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts
 +++ b/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts
-@@ -143,36 +143,11 @@
+@@ -143,37 +143,11 @@
  			ubi: partition@580000 {
  				label = "ubi";
 -				reg = <0x0580000 0x4000000>;
