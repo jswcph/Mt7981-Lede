@@ -1,106 +1,361 @@
-#!/bin/sh
+```bash
+#!/bin/bash
+#=================================================
+# part2.sh
+# 功能：合并 通用配置 + 设备配置生成最终 .config
+#       写入默认系统设置覆盖目录 files/
+#       注入自定义 DTS
+#       写入 Mihomo Meta
+#       确保 iStore / 中文语言包进入最终 .config
+#       执行 defconfig 解析依赖
+#=================================================
+set -e
+
+SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
+BASE_DIR="$GITHUB_WORKSPACE"
+[ -z "$BASE_DIR" ] && BASE_DIR="$(pwd)"
+
+if [ -z "${DEVICE}" ]; then
+  echo "错误：未指定 DEVICE 环境变量"
+  exit 1
+fi
+
+DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
+
+if [ ! -f "${DEVICE_CONFIG}" ]; then
+  echo "错误：找不到设备配置文件 ${DEVICE_CONFIG}"
+  echo "请检查 config/devices/ 目录下是否有对应的 .config 文件"
+  exit 1
+fi
+
 
 #=================================================
-# Nokia XG-040G 首次启动默认配置
+# 合并通用配置 + 设备配置
 #=================================================
 
-#=================================================
-# 主机名
-#=================================================
+echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 
-uci set system.@system[0].hostname='OpenWrt'
+cat \
+  "${BASE_DIR}/config/base.config" \
+  "${DEVICE_CONFIG}" \
+  > "${SRC_DIR}/.config"
 
-#=================================================
-# 日志
-#=================================================
-
-uci set system.@system[0].log_size='32'
 
 #=================================================
-# 删除旧 WAN / LAN 配置
+# 写入 files/
 #=================================================
 
-uci -q delete network.wan
-uci -q delete network.lan
+echo "==== 写入默认系统设置覆盖目录 files/ ===="
 
-# 删除旧 br-lan
-uci -q delete network.br_lan
+rm -rf "${SRC_DIR}/files"
 
-#=================================================
-# WAN
-# lan1 = WAN
-#=================================================
+mkdir -p "${SRC_DIR}/files"
 
-uci set network.wan='interface'
-uci set network.wan.device='lan1'
-uci set network.wan.proto='dhcp'
+cp -r \
+  "${BASE_DIR}/files/." \
+  "${SRC_DIR}/files/"
 
-#=================================================
-# LAN
-# lan2 / lan3 / lan4
-#=================================================
+if [ -d "${SRC_DIR}/files/etc/uci-defaults" ]; then
+  find "${SRC_DIR}/files/etc/uci-defaults" \
+    -type f \
+    -exec chmod +x {} \;
+fi
 
-uci set network.lan='interface'
-uci set network.lan.device='br-lan'
-uci set network.lan.proto='static'
-uci set network.lan.ipaddr='192.168.6.1'
-uci set network.lan.netmask='255.255.255.0'
 
 #=================================================
-# br-lan
-# 强制只包含 lan2 / lan3 / lan4
+# Ruijie RG-X60 Pro 107M DTS
 #=================================================
 
-uci set network.br_lan='device'
-uci set network.br_lan.type='bridge'
+if [ "${DEVICE}" = "ruijie_x60-pro-107m" ]; then
 
-uci add_list network.br_lan.ports='lan2'
-uci add_list network.br_lan.ports='lan3'
-uci add_list network.br_lan.ports='lan4'
+  CUSTOM_DTS="${BASE_DIR}/custom/mt7986a-ruijie-rg-x60-pro-107m.dts"
 
-#=================================================
-# 默认密码
-#=================================================
+  TARGET_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
 
-(echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
+  if [ ! -f "${CUSTOM_DTS}" ]; then
+    echo "错误：找不到 X60 Pro 107M DTS：${CUSTOM_DTS}"
+    exit 1
+  fi
 
-#=================================================
-# Argon
-#=================================================
+  echo "==== 注入 Ruijie RG-X60 Pro 107M DTS ===="
 
-uci set luci.main.mediaurlbase='/luci-static/argon'
+  cp \
+    "${CUSTOM_DTS}" \
+    "${TARGET_DTS}"
 
-#=================================================
-# 默认语言：简体中文
-#=================================================
+  grep -A2 \
+    'partition@680000' \
+    "${TARGET_DTS}"
 
-uci set luci.main.lang='zh_cn'
+fi
 
-#=================================================
-# 提交配置
-#=================================================
-
-uci commit system
-uci commit network
-uci commit luci
 
 #=================================================
-# 最终检查
+# 写回预编译 Mihomo Meta 核心
+#=================================================
+
+echo "==== 写回预编译的 Mihomo Meta 核心 ===="
+
+mkdir -p \
+  "${SRC_DIR}/files/etc/openclash/core"
+
+if [ -f "${SRC_DIR}/clash_meta" ]; then
+
+  cp \
+    "${SRC_DIR}/clash_meta" \
+    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+  chmod 0755 \
+    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+  echo ">>> Mihomo Meta 已写入"
+
+else
+
+  echo "警告：未找到预编译的 clash_meta，跳过内核写入"
+
+fi
+
+
+#=================================================
+# 关键：检查 iStore Feed 是否真的存在
 #=================================================
 
 echo "==============================================="
-echo " Nokia XG-040G 默认网络配置完成"
+echo "       检查 iStore Feed"
 echo "==============================================="
 
-echo "WAN:"
-uci show network.wan
+cd "${SRC_DIR}"
 
-echo "LAN:"
-uci show network.lan
+echo ">>> 查找 luci-app-store Makefile"
 
-echo "BR-LAN:"
-uci show network.br_lan
+ISTORE_MAKEFILE=""
+
+for path in \
+  "package/feeds/istore/luci-app-store/Makefile" \
+  "feeds/istore/luci/luci-app-store/Makefile" \
+  "package/istore/luci/luci-app-store/Makefile"
+do
+
+  if [ -f "${path}" ]; then
+    ISTORE_MAKEFILE="${SRC_DIR}/${path}"
+    break
+  fi
+
+done
+
+if [ -z "${ISTORE_MAKEFILE}" ]; then
+
+  echo "ERROR：找不到 luci-app-store Makefile"
+
+  echo ">>> 当前 iStore 相关目录："
+
+  find \
+    "${SRC_DIR}/package" \
+    "${SRC_DIR}/feeds" \
+    -path '*istore*' \
+    -maxdepth 8 \
+    2>/dev/null || true
+
+  exit 1
+
+fi
+
+echo ">>> 找到 iStore："
+echo "${ISTORE_MAKEFILE}"
+
+
+#=================================================
+# 强制写入核心软件包
+#=================================================
 
 echo "==============================================="
+echo "       写入最终核心软件包"
+echo "==============================================="
 
-exit 0
+cat >> "${SRC_DIR}/.config" <<'EOF'
+
+#=================================================
+# 中文 Web
+#=================================================
+CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
+CONFIG_PACKAGE_luci-i18n-opkg-zh-cn=y
+
+#=================================================
+# iStore
+#=================================================
+CONFIG_PACKAGE_luci-app-store=y
+EOF
+
+
+#=================================================
+# 第一次 defconfig
+# 解析依赖
+#=================================================
+
+echo "==== 第一次 make defconfig ===="
+
+make defconfig
+
+
+#=================================================
+# 第一次检查 iStore
+#=================================================
+
+echo "==============================================="
+echo "       第一次检查 iStore 配置"
+echo "==============================================="
+
+if grep -q '^CONFIG_PACKAGE_luci-app-store=y$' .config; then
+
+  echo ">>> luci-app-store=y"
+  echo ">>> iStore 已成功进入最终配置"
+
+else
+
+  echo "ERROR：luci-app-store 没有进入最终 .config"
+
+  echo ">>> 当前相关配置："
+
+  grep -E \
+    '^(CONFIG_PACKAGE_(luci-app-store|luci-lib-taskd|curl|tar|libuci-lua|mount-utils)|# CONFIG_PACKAGE_luci-app-store)' \
+    .config \
+    || true
+
+  exit 1
+
+fi
+
+
+#=================================================
+# 强制再次写入 iStore
+#
+# 防止后续配置处理将其关闭
+#=================================================
+
+echo "==== 最终强制确认 iStore ===="
+
+sed -i \
+  '/^CONFIG_PACKAGE_luci-app-store=/d' \
+  .config
+
+sed -i \
+  '/^# CONFIG_PACKAGE_luci-app-store is not set$/d' \
+  .config
+
+echo 'CONFIG_PACKAGE_luci-app-store=y' >> .config
+
+
+#=================================================
+# 第二次 defconfig
+#=================================================
+
+echo "==== 第二次 make defconfig ===="
+
+make defconfig
+
+
+#=================================================
+# 最终核心软件包检查
+#=================================================
+
+echo "==============================================="
+echo "       最终核心软件包检查"
+echo "==============================================="
+
+grep -E \
+  '^CONFIG_PACKAGE_(luci-i18n-base-zh-cn|luci-i18n-firewall-zh-cn|luci-i18n-opkg-zh-cn|luci-app-store)=' \
+  .config \
+  || true
+
+
+#=================================================
+# 最终确认 iStore
+#=================================================
+
+if ! grep -q '^CONFIG_PACKAGE_luci-app-store=y$' .config; then
+
+  echo "ERROR：最终 make defconfig 后 iStore 被移除了"
+
+  echo ">>> 检查 iStore Makefile："
+  echo "${ISTORE_MAKEFILE}"
+
+  echo ">>> 检查相关配置："
+
+  grep -E \
+    'luci-app-store|luci-lib-taskd|libuci-lua|mount-utils|CONFIG_USE_APK' \
+    .config \
+    || true
+
+  exit 1
+
+fi
+
+echo ">>> iStore 最终配置确认："
+echo "CONFIG_PACKAGE_luci-app-store=y"
+
+
+#=================================================
+# Nokia XG-040G-MD/MF 无无线硬件
+#=================================================
+
+if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
+
+  echo "==== Nokia XG-040G：强制关闭无线驱动/无线管理组件 ===="
+
+  for sym in \
+    CONFIG_PACKAGE_wpad-openssl \
+    CONFIG_PACKAGE_wifi-scripts \
+    CONFIG_PACKAGE_wireless-regdb \
+    CONFIG_PACKAGE_kmod-cfg80211 \
+    CONFIG_PACKAGE_kmod-mac80211 \
+    CONFIG_PACKAGE_kmod-mt76 \
+    CONFIG_PACKAGE_kmod-mt76-core \
+    CONFIG_PACKAGE_kmod-mt76-connac \
+    CONFIG_PACKAGE_kmod-mt7915e \
+    CONFIG_PACKAGE_kmod-mt7916 \
+    CONFIG_PACKAGE_kmod-mt7996 \
+    CONFIG_PACKAGE_kmod-mt7996-firmware
+  do
+
+    sed -i \
+      "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" \
+      .config
+
+    echo "# ${sym} is not set" >> .config
+
+  done
+
+
+  echo "==== 无线配置最终检查 ===="
+
+  grep -E \
+    '^(CONFIG_PACKAGE_(wpad|wifi-scripts|wireless-regdb)|CONFIG_PACKAGE_kmod-(cfg80211|mac80211|mt76|mt7915|mt7916|mt7996))' \
+    .config \
+    || true
+
+fi
+
+
+#=================================================
+# 完成
+#=================================================
+
+echo "==============================================="
+echo "       part2.sh 执行完毕"
+echo "==============================================="
+
+echo ">>> 当前编译设备：${DEVICE}"
+
+echo ">>> iStore："
+grep '^CONFIG_PACKAGE_luci-app-store=' .config
+
+echo ">>> 中文 Web："
+grep -E \
+  '^CONFIG_PACKAGE_luci-i18n-(base|firewall|opkg)-zh-cn=' \
+  .config \
+  || true
+
+echo ">>> part2.sh 完成"
+```
