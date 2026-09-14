@@ -31,24 +31,6 @@ mkdir -p "${SRC_DIR}/files"
 cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
 
-#=================================================
-# Ruijie RG-X60 Pro 107M DTS
-# 使用用户提供的 107M 分区版本；不修改 ImmortalWrt master
-# 中原有设备定义，只替换本次构建使用的 DTS 文件。
-#=================================================
-if [ "${DEVICE}" = "ruijie_x60-pro-107m" ]; then
-  CUSTOM_DTS="${BASE_DIR}/custom/mt7986a-ruijie-rg-x60-pro-107m.dts"
-  TARGET_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
-
-  if [ ! -f "${CUSTOM_DTS}" ]; then
-    echo "错误：找不到 X60 Pro 107M DTS：${CUSTOM_DTS}"
-    exit 1
-  fi
-
-  echo "==== 注入 Ruijie RG-X60 Pro 107M DTS ===="
-  cp "${CUSTOM_DTS}" "${TARGET_DTS}"
-  grep -A2 'partition@680000' "${TARGET_DTS}"
-fi
 
 echo "==== 写回预编译的 Mihomo Meta 核心 ===="
 mkdir -p "${SRC_DIR}/files/etc/openclash/core"
