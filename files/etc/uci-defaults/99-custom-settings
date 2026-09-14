@@ -1,97 +1,47 @@
 #!/bin/sh
-#=================================================
-# Nokia XG-040G-MD/MF 首次启动网络设置
-#
-# 默认：
-#   光口 / 默认 WAN -> wan
-#   lan1/lan2/lan3/lan4 -> br-lan
-#
-# 修改为：
-#   lan1 -> WAN
-#   lan2/lan3/lan4 -> LAN（br-lan）
-#=================================================
+# 99-custom-network
+# OpenWrt 首次启动自定义配置脚本
+# 网口:  lan1 -> WAN    lan2 / lan3 / lan4 -> LAN(桥接 br-lan)
+# LAN 地址: 192.168.6.1    主机名: OpenWrt    root 密码: password
 
-# 只有网络配置存在时才执行
-[ -f /etc/config/network ] || exit 0
+logger -t custom-firstboot "开始执行首次启动自定义配置"
 
-. /lib/functions.sh
+### 1. 设置路由器名称 ###
+uci set system.@system[0].hostname='OpenWrt'
+uci commit system
 
-BR_LAN_SECTION=""
+### 2. 清空原有的 device 段，避免和默认配置冲突 ###
+while uci -q delete network.@device[0]; do :; done
 
-# 找到 name='br-lan' 的 device 段
-find_br_lan() {
-    local section="$1"
-    local name
+### 3. 重新定义 LAN 桥接设备：仅包含 lan2 / lan3 / lan4 ###
+uci set network.lan_br='device'
+uci set network.lan_br.type='bridge'
+uci set network.lan_br.name='br-lan'
+uci add_list network.lan_br.ports='lan2'
+uci add_list network.lan_br.ports='lan3'
+uci add_list network.lan_br.ports='lan4'
 
-    config_get name "$section" name
+### 4. 配置 LAN 接口 ###
+uci set network.lan='interface'
+uci set network.lan.device='br-lan'
+uci set network.lan.proto='static'
+uci set network.lan.ipaddr='192.168.6.1'
+uci set network.lan.netmask='255.255.255.0'
 
-    if [ "$name" = "br-lan" ]; then
-        BR_LAN_SECTION="$section"
-    fi
-}
+### 5. 配置 WAN 接口：lan1 作为 WAN 口 ###
+uci set network.wan='interface'
+uci set network.wan.device='lan1'
+uci set network.wan.proto='dhcp'
 
-config_load network
-config_foreach find_br_lan device
-
-if [ -z "$BR_LAN_SECTION" ]; then
-    echo "[99-custom-settings] ERROR: 未找到 br-lan device 配置"
-    exit 1
-fi
-
-echo "[99-custom-settings] 找到 br-lan：$BR_LAN_SECTION"
-
-#=================================================
-# 1. br-lan 只保留 lan2 / lan3 / lan4
-#=================================================
-
-uci -q delete "network.${BR_LAN_SECTION}.ports"
-
-uci add_list "network.${BR_LAN_SECTION}.ports=lan2"
-uci add_list "network.${BR_LAN_SECTION}.ports=lan3"
-uci add_list "network.${BR_LAN_SECTION}.ports=lan4"
-
-#=================================================
-# 2. LAN 接口使用 br-lan
-#=================================================
-
-uci -q set network.lan.device='br-lan'
-
-#=================================================
-# 3. WAN 接口改为 lan1
-#=================================================
-
-uci -q set network.wan.device='lan1'
-
-# 如果系统存在 wan6，也同步改到 lan1，避免 IPv6 仍使用旧 WAN 物理口
-if uci -q get network.wan6 >/dev/null 2>&1; then
-    uci -q set network.wan6.device='lan1'
-fi
-
-#=================================================
-# 4. 保存网络配置
-#=================================================
+uci set network.wan6='interface'
+uci set network.wan6.device='lan1'
+uci set network.wan6.proto='dhcpv6'
 
 uci commit network
 
-#=================================================
-# 5. 最终检查
-#=================================================
+### 6. 设置 root 默认密码为 password ###
+(echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
 
-echo "==============================================="
-echo "Nokia XG-040G 首次启动网络配置完成"
-echo "==============================================="
-echo "WAN  -> lan1"
-echo "LAN  -> lan2 lan3 lan4"
-echo "==============================================="
+logger -t custom-firstboot "首次启动自定义配置完成"
 
-echo ">>> WAN："
-uci -q get network.wan.device || true
-
-echo ">>> WAN6："
-uci -q get network.wan6.device 2>/dev/null || true
-
-echo ">>> br-lan："
-uci -q show "network.${BR_LAN_SECTION}.ports" || true
-
-# 网络配置已经写入，交由首次启动流程继续处理网络重载
 exit 0
