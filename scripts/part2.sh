@@ -1,18 +1,18 @@
 #!/bin/bash
 #=================================================
 # part2.sh - Nokia XG-040G ImmortalWrt
-# 生成最终 .config、写入 files，并离线预装 iStore APK
+# 生成最终 .config、写入 files，并启用 iStore 离线本地包
 #=================================================
 set -e
 
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
-ISTORE_DIR="${SRC_DIR}/../istore-offline"
 
 [ -n "${DEVICE:-}" ] || { echo "ERROR: 未指定 DEVICE"; exit 1; }
 DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 [ -f "${DEVICE_CONFIG}" ] || { echo "ERROR: 找不到 ${DEVICE_CONFIG}"; exit 1; }
 [ -d "${SRC_DIR}" ] || { echo "ERROR: 源码目录不存在 ${SRC_DIR}"; exit 1; }
+[ -d "${SRC_DIR}/package/istore-offline" ] || { echo "ERROR: iStore 本地包目录不存在"; exit 1; }
 
 cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
@@ -20,15 +20,14 @@ echo "==== part2: ${DEVICE} ===="
 echo "==== [1/4] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
-# iStore 不再作为 ImmortalWrt 源码包参与 defconfig。
-# base.config 中保留的旧配置在这里显式取消，避免进入源码包依赖解析。
+# base.config 中的旧 iStore 选项先清掉，再启用 part1 根据指定 .run
+# 转换出来的本地 OpenWrt 包。这样不会使用 istore feed。
 for sym in \
   CONFIG_PACKAGE_luci-app-store \
   CONFIG_PACKAGE_luci-lib-taskd \
   CONFIG_PACKAGE_luci-lib-xterm \
   CONFIG_PACKAGE_taskd; do
   sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
-  echo "# ${sym} is not set" >> .config
 done
 
 cat >> .config <<'EOF'
@@ -46,10 +45,16 @@ CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 
 # LuCI 简体中文
 CONFIG_LUCI_LANG_zh_Hans=y
+
+# iStore：来自指定 .run 的四个离线 APK，已转换为本地 OpenWrt 包
+CONFIG_PACKAGE_luci-app-store=y
+CONFIG_PACKAGE_luci-lib-taskd=y
+CONFIG_PACKAGE_luci-lib-xterm=y
+CONFIG_PACKAGE_taskd=y
 EOF
 
 # =================================================
-# [2/4] 准备 files/ 与 iStore 离线包
+# [2/4] 准备 files/
 # =================================================
 echo "==== [2/4] 准备 files/ ===="
 rm -rf "${SRC_DIR}/files"
@@ -67,13 +72,11 @@ mkdir -p "$(dirname "${MIHOMO_DST}")"
 cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
 chmod 0755 "${MIHOMO_DST}"
 
-[ -d "${ISTORE_DIR}" ] || { echo "ERROR: iStore 离线目录不存在：${ISTORE_DIR}"; exit 1; }
-for apk in \
-  luci-app-store-0.2.0-r3.apk \
-  luci-lib-taskd-1.0.25.apk \
-  luci-lib-xterm-4.18.0.apk \
-  taskd-1.0.3-r2.apk; do
-  [ -f "${ISTORE_DIR}/${apk}" ] || { echo "ERROR: 找不到 iStore APK：${ISTORE_DIR}/${apk}"; exit 1; }
+for pkg in luci-app-store luci-lib-taskd luci-lib-xterm taskd; do
+  [ -d "${SRC_DIR}/package/istore-offline/${pkg}/root" ] || {
+    echo "ERROR: iStore 本地包 ${pkg} 未准备完成"
+    exit 1
+  }
 done
 
 # =================================================
@@ -83,49 +86,14 @@ echo "==== [3/4] make defconfig ===="
 make defconfig
 
 # =================================================
-# [3.5/4] 将 iStore APK 注入目标 rootfs
-# =================================================
-# 不能在 Ubuntu 构建机上直接执行 install25.sh；它是目标 OpenWrt 的运行时脚本。
-# 这里使用 ImmortalWrt 的 staging_dir/host/bin/apk 工具，对一个临时 target rootfs
-# 执行离线 apk add，避免首次启动时依赖网络。
-echo "==== [3.5/4] 离线安装 iStore APK ===="
-APK_BIN="${STAGING_DIR_HOST:-${SRC_DIR}/staging_dir/host}/bin/apk"
-[ -x "${APK_BIN}" ] || { echo "ERROR: 找不到 ImmortalWrt host apk：${APK_BIN}"; exit 1; }
-
-# 使用 OpenWrt 构建系统的 rootfs 目录；此时先建立最小目标目录。
-TARGET_ROOT="${SRC_DIR}/tmp/istore-root"
-rm -rf "${TARGET_ROOT}"
-mkdir -p "${TARGET_ROOT}"
-
-# 先准备 apk 所需目录。实际最终 rootfs 构建时，apk 数据库及文件会随包进入固件。
-mkdir -p "${TARGET_ROOT}/etc/apk" "${TARGET_ROOT}/lib/apk/db" "${TARGET_ROOT}/var/lib/apk"
-
-# 以 target root 为 --root，完全离线安装；--no-network 防止构建阶段意外访问网络。
-"${APK_BIN}" --root "${TARGET_ROOT}" --no-network add --allow-untrusted \
-  "${ISTORE_DIR}/luci-lib-xterm-4.18.0.apk" \
-  "${ISTORE_DIR}/luci-lib-taskd-1.0.25.apk" \
-  "${ISTORE_DIR}/taskd-1.0.3-r2.apk" \
-  "${ISTORE_DIR}/luci-app-store-0.2.0-r3.apk"
-
-# 将 APK 安装结果合并到 OpenWrt files/，并把 apk 数据库一并带入最终固件。
-cp -a "${TARGET_ROOT}/." "${SRC_DIR}/files/"
-
-# 不把下载的原始 APK 放进固件，避免浪费 NAND/ROM 空间。
-rm -rf "${SRC_DIR}/files/tmp" \
-       "${SRC_DIR}/files/var/cache/apk"
-
-# =================================================
-# [4/4] 最终检查
+# [4/4] 最终配置验证
 # =================================================
 echo "==== [4/4] iStore / 中文 / Mihomo 最终检查 ===="
 MISSING=0
 
-# iStore 现在不是 CONFIG_PACKAGE_*，而是已注入 files/rootfs 的离线 APK 内容。
-for path in \
-  "${SRC_DIR}/files/usr/share/luci/menu.d/luci-app-store.json" \
-  "${SRC_DIR}/files/etc/apk/world"; do
-  if [ ! -e "${path}" ]; then
-    echo "ERROR: iStore 离线安装结果缺少：${path}"
+for sym in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
+  if ! grep -q "^CONFIG_PACKAGE_${sym}=y" .config; then
+    echo "ERROR: ${sym} 未进入最终配置"
     MISSING=1
   fi
 done
@@ -135,16 +103,14 @@ if ! grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config; then
   MISSING=1
 fi
 
-for sym in luci-app-store taskd luci-lib-taskd luci-lib-xterm; do
-  if grep -q "^CONFIG_PACKAGE_${sym}=y" .config; then
-    echo "ERROR: ${sym} 仍被作为源码 package 加入 .config"
-    MISSING=1
-  fi
-done
+if ! grep -q '^CONFIG_USE_APK=y' .config; then
+  echo "ERROR: CONFIG_USE_APK 未启用"
+  MISSING=1
+fi
 
 [ "$MISSING" = "1" ] && exit 1
 
-echo ">>> iStore 已按离线 APK 方式预装"
+echo ">>> iStore 已作为本地离线包进入最终固件配置"
 
 echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
@@ -174,6 +140,6 @@ echo "DEVICE: ${DEVICE}"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
 echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
-echo "iStore：离线 APK 已注入 ${SRC_DIR}/files/"
+echo "iStore：luci-app-store + luci-lib-taskd + luci-lib-xterm + taskd"
 echo "Mihomo: ${MIHOMO_DST}"
 ls -lh "${MIHOMO_DST}"
