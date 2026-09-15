@@ -8,25 +8,21 @@ set -e
 DATE_STR=$(date +'%Y-%m-%d %H:%M')
 
 cat > RELEASE_NOTES.md << EOF
-## OpenWrt 固件自动构建
+## ImmortalWrt Wi-Fi 路由器自动构建
 
 编译时间：${DATE_STR}（北京时间）
 
 ### 支持机型
-- Nokia XG-040G-MD
-- Nokia XG-040G-MD UBI
-- Nokia XG-040G-MF
-- Nokia XG-040G-MF UBI
-- Ruijie RG-X60 Pro 107M UBI
+- H3C Magic NX30 Pro
+- Ruijie RG-X60
 
 ### 内置插件
-- Passwall（科学上网）
-- OpenClash（科学上网）
+- Passwall（Xray + Sing-box）
+- OpenClash（Mihomo Meta）
 - Argon 主题及主题设置面板
-- USB 2.0 / USB 3.0
-- USB 存储 / UAS
-- USB 转 RJ45 网卡驱动
-- Samba4 NAS
+- LuCI 简体中文
+- APK LuCI 软件包管理器
+- Wi-Fi 驱动及无线网络基础组件
 
 ### 默认参数
 | 项目 | 值 |
@@ -37,7 +33,7 @@ cat > RELEASE_NOTES.md << EOF
 | 默认语言 | 简体中文 |
 | 默认主题 | Argon |
 
-> Nokia 与 Ruijie 固件请务必确认设备型号、Flash 分区布局和对应 U-Boot 后再刷写。本 Release 中的 Ruijie RG-X60 Pro 版本使用 107M UBI 分区布局。
+> 刷写前请确认设备型号、Flash 分区布局、U-Boot 和对应固件格式。两款机型均为独立的 Wi-Fi 路由器配置。
 EOF
 
 echo "RELEASE_NOTES.md 生成完毕"
