@@ -1,19 +1,21 @@
 #!/bin/sh
 # 99-custom-network
 # OpenWrt 首次启动自定义配置脚本
-# 网口:  lan1 -> WAN    lan2 / lan3 / lan4 -> LAN(桥接 br-lan)
+# 网口: lan1 -> WAN    lan2 / lan3 / lan4 -> LAN(桥接 br-lan)
 # LAN 地址: 192.168.6.1    主机名: OpenWrt    root 密码: password
 
 logger -t custom-firstboot "开始执行首次启动自定义配置"
 
-### 1. 设置路由器名称 ###
 uci set system.@system[0].hostname='OpenWrt'
 uci commit system
 
-### 2. 清空原有的 device 段，避免和默认配置冲突 ###
-while uci -q delete network.@device[0]; do :; done
+# 删除旧接口，但绝不删除系统自动生成的 device 段
+uci -q delete network.lan
+uci -q delete network.wan
+uci -q delete network.wan6
+uci -q delete network.lan_br
 
-### 3. 重新定义 LAN 桥接设备：仅包含 lan2 / lan3 / lan4 ###
+# LAN bridge
 uci set network.lan_br='device'
 uci set network.lan_br.type='bridge'
 uci set network.lan_br.name='br-lan'
@@ -21,27 +23,26 @@ uci add_list network.lan_br.ports='lan2'
 uci add_list network.lan_br.ports='lan3'
 uci add_list network.lan_br.ports='lan4'
 
-### 4. 配置 LAN 接口 ###
+# LAN
 uci set network.lan='interface'
 uci set network.lan.device='br-lan'
 uci set network.lan.proto='static'
 uci set network.lan.ipaddr='192.168.6.1'
 uci set network.lan.netmask='255.255.255.0'
 
-### 5. 配置 WAN 接口：lan1 作为 WAN 口 ###
+# WAN
 uci set network.wan='interface'
 uci set network.wan.device='lan1'
 uci set network.wan.proto='dhcp'
 
+# WAN6
 uci set network.wan6='interface'
 uci set network.wan6.device='lan1'
 uci set network.wan6.proto='dhcpv6'
 
 uci commit network
 
-### 6. 设置 root 默认密码为 password ###
 (echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
 
-logger -t custom-firstboot "首次启动自定义配置完成"
-
+logger -t custom-firstboot "首次启动自定义配置完成: lan1=WAN, lan2/lan3/lan4=br-lan, LAN=192.168.6.1"
 exit 0
