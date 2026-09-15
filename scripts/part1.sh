@@ -1,7 +1,7 @@
 #!/bin/bash
 #=================================================
 # part1.sh
-# ImmortalWrt 源码 + Feeds + iStore 离线包 + Mihomo Meta
+# ImmortalWrt 源码 + Feeds + iStore 离线 APK + Mihomo Meta
 #=================================================
 set -e
 
@@ -12,6 +12,7 @@ SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 ISTORE_RUN_URL="https://github.com/wkccd/CloudRunFilesBuilder/releases/download/2026-06-18/25-luci-app-store-0.2.0-r3_all.run"
 ISTORE_RUN="${SRC_DIR}/../25-luci-app-store-0.2.0-r3_all.run"
 ISTORE_DIR="${SRC_DIR}/../istore-offline"
+ISTORE_PACKAGE_DIR="${SRC_DIR}/package/istore-offline"
 
 
 echo "==============================================="
@@ -83,13 +84,12 @@ echo "OpenClash: package/feeds/openclash/luci-app-openclash"
 echo "Argon: package/feeds/luci_theme_argon"
 
 echo "==== 下载并解包 iStore 离线安装包 ===="
-rm -rf "${ISTORE_DIR}"
-mkdir -p "${ISTORE_DIR}"
+rm -rf "${ISTORE_DIR}" "${ISTORE_PACKAGE_DIR}"
+mkdir -p "${ISTORE_DIR}" "${ISTORE_PACKAGE_DIR}"
 wget -q --show-progress "${ISTORE_RUN_URL}" -O "${ISTORE_RUN}"
 chmod 0755 "${ISTORE_RUN}"
 
-# Makeself 自解压包：只解包，不执行 install25.sh。
-# 这样不会在 Ubuntu 构建机上误执行目标 OpenWrt 的 apk 安装逻辑。
+# Makeself 只解包，不执行 install25.sh。
 if ! "${ISTORE_RUN}" --noexec --target "${ISTORE_DIR}" >/tmp/istore-extract.log 2>&1; then
   echo "ERROR: iStore .run 解包失败"
   cat /tmp/istore-extract.log
@@ -108,8 +108,115 @@ for apk in \
   fi
 done
 
-echo "iStore 离线 APK："
-ls -lh "${ISTORE_DIR}"/*.apk
+# APK v3 是 apk-tools 专用格式，不能用 tar/7z 当作普通压缩包直接处理。
+# 使用 Alpine 的 apk-tools 仅做离线 payload 提取，不执行任何目标机脚本。
+command -v docker >/dev/null 2>&1 || { echo "ERROR: 构建机没有 Docker，无法提取 APK v3 包"; exit 1; }
+
+for item in \
+  "luci-app-store-0.2.0-r3.apk:luci-app-store:0.2.0-r3" \
+  "luci-lib-taskd-1.0.25.apk:luci-lib-taskd:1.0.25" \
+  "luci-lib-xterm-4.18.0.apk:luci-lib-xterm:4.18.0" \
+  "taskd-1.0.3-r2.apk:taskd:1.0.3-r2"; do
+  IFS=':' read -r apk pkg ver <<< "${item}"
+  PKG_DIR="${ISTORE_PACKAGE_DIR}/${pkg}"
+  mkdir -p "${PKG_DIR}/root"
+  docker run --rm \
+    -v "${ISTORE_DIR}:/input:ro" \
+    -v "${PKG_DIR}/root:/output" \
+    alpine:latest \
+    apk extract --allow-untrusted --destination /output "/input/${apk}"
+done
+
+# 生成本地 OpenWrt 包定义。
+# 这些包的文件来自你指定的 .run；构建阶段重新封装为 ImmortalWrt 原生 APK，
+# 因而最终固件会在正常 package/install 阶段把它们写入 rootfs，无需首次开机联网。
+cat > "${ISTORE_PACKAGE_DIR}/Makefile" <<'EOF'
+include $(TOPDIR)/rules.mk
+
+include $(INCLUDE_DIR)/package.mk
+
+PKGARCH:=all
+
+# iStore 主程序
+PKG_NAME:=luci-app-store
+PKG_VERSION:=0.2.0-r3
+PKG_RELEASE:=1
+
+define Package/luci-app-store
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=Applications
+  TITLE:=LuCI based iStore
+  DEPENDS:=+curl +tar +libuci-lua +mount-utils +luci-lib-taskd +apk +luci-compat
+  PKGARCH:=all
+endef
+
+define Package/luci-app-store/install
+	$(CP) ./luci-app-store/root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,luci-app-store))
+
+# taskd
+PKG_NAME:=taskd
+PKG_VERSION:=1.0.3-r2
+PKG_RELEASE:=1
+
+define Package/taskd
+  SECTION:=utils
+  CATEGORY:=Utilities
+  TITLE:=taskd
+endef
+
+define Package/taskd/install
+	$(CP) ./taskd/root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,taskd))
+
+# luci-lib-taskd
+PKG_NAME:=luci-lib-taskd
+PKG_VERSION:=1.0.25
+PKG_RELEASE:=1
+
+define Package/luci-lib-taskd
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=Libraries
+  TITLE:=LuCI taskd library
+  DEPENDS:=+taskd +luci-lib-xterm +luci-lua-runtime
+  PKGARCH:=all
+endef
+
+define Package/luci-lib-taskd/install
+	$(CP) ./luci-lib-taskd/root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,luci-lib-taskd))
+
+# luci-lib-xterm
+PKG_NAME:=luci-lib-xterm
+PKG_VERSION:=4.18.0
+PKG_RELEASE:=1
+
+define Package/luci-lib-xterm
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=Libraries
+  TITLE:=LuCI xterm library
+  PKGARCH:=all
+endef
+
+define Package/luci-lib-xterm/install
+	$(CP) ./luci-lib-xterm/root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,luci-lib-xterm))
+EOF
+
+# 使本地包目录参与 feeds/config 解析
+./scripts/feeds install -f -p luci luci-base >/dev/null 2>&1 || true
+
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
@@ -143,6 +250,6 @@ echo "==============================================="
 echo "  part1.sh 完成"
 echo "==============================================="
 echo "ImmortalWrt：${SRC_DIR}"
-echo "iStore APK：${ISTORE_DIR}"
+echo "iStore 本地包：${ISTORE_PACKAGE_DIR}"
 echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
