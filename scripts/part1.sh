@@ -69,9 +69,9 @@ EOF
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-# iStore：把 iStore 自身及其构建/运行依赖全部安装到 package/feeds/istore。
-# 仅安装 luci-app-store 会留下部分依赖未进入顶层 Kconfig，make defconfig 可能将
-# CONFIG_PACKAGE_luci-app-store 从 .config 清掉。
+# iStore：统一为所有 Nokia XG-040G 型号安装。
+# 这里负责把 iStore 本体及相关组件注册到顶层 Kconfig，base.config
+# 负责选择 CONFIG_PACKAGE_*，part2.sh 负责最终 defconfig 后检查。
 ./scripts/feeds install -d y -p istore luci-app-store luci-lib-taskd luci-lib-xterm taskd
 
 if [ ! -f "package/feeds/luci/luci-app-package-manager/Makefile" ]; then
