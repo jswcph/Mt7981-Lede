@@ -102,7 +102,7 @@ for line in lines:
     key = None
     if line.startswith('CONFIG_') and '=' in line:
         key = line.split('=', 1)[0]
-    elif line.startswith('# CONFIG_ is not set'):
+    elif line.startswith('# CONFIG_') and line.endswith(' is not set'):
         key = line[2:].split(' is not set', 1)[0]
     if key in forced:
         if key not in seen:
@@ -171,7 +171,22 @@ check_disabled CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
 
 echo "==== ${DEVICE}：关闭无硬件 Wi-Fi 组件 ===="
 if [[ "${DEVICE}" == h3c_magic-nx30-pro || "${DEVICE}" == ruijie_rg-x60* ]]; then
-  :
+  for sym in \
+    CONFIG_PACKAGE_wpad-openssl \
+    CONFIG_PACKAGE_wifi-scripts \
+    CONFIG_PACKAGE_wireless-regdb \
+    CONFIG_PACKAGE_kmod-cfg80211 \
+    CONFIG_PACKAGE_kmod-mac80211 \
+    CONFIG_PACKAGE_kmod-mt76 \
+    CONFIG_PACKAGE_kmod-mt76-core \
+    CONFIG_PACKAGE_kmod-mt76-connac \
+    CONFIG_PACKAGE_kmod-mt7915e \
+    CONFIG_PACKAGE_kmod-mt7916 \
+    CONFIG_PACKAGE_kmod-mt7996 \
+    CONFIG_PACKAGE_kmod-mt7996-firmware; do
+    sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
+    echo "# ${sym} is not set" >> .config
+  done
 fi
 
 echo "==== part2 完成 ===="
