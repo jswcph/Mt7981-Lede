@@ -151,6 +151,20 @@ EOF
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
+# scripts/feeds 在部分情况下只更新 feed 索引，但没有创建 package/feeds 下的符号链接。
+# 这里对本次构建明确依赖的 PassWall 包做兜底，避免出现：
+# package/feeds/passwall_packages/xray-core/Makefile 缺失。
+for pkg in xray-core sing-box; do
+  if [ ! -f "package/feeds/passwall_packages/${pkg}/Makefile" ]; then
+    if [ ! -f "feeds/passwall_packages/${pkg}/Makefile" ]; then
+      echo "ERROR: PassWall packages 源码缺失：feeds/passwall_packages/${pkg}/Makefile"
+      exit 1
+    fi
+    mkdir -p package/feeds/passwall_packages
+    ln -sfn "../../../feeds/passwall_packages/${pkg}" "package/feeds/passwall_packages/${pkg}"
+  fi
+done
+
 # PassWall feed 在当前仓库的 luci-app-passwall/Makefile 是有效的。
 # 如果 scripts/feeds 没有创建 package/feeds/passwall 下的链接，则手动补齐该链接，
 # 避免仅因 feeds 安装索引/链接异常导致构建直接中止。
