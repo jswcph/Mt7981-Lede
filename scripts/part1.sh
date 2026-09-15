@@ -108,39 +108,40 @@ for apk in \
   fi
 done
 
-# APK v3 是 apk-tools 专用格式，不能用 tar/7z 当作普通压缩包直接处理。
-# 使用 Alpine 的 apk-tools 仅做离线 payload 提取，不执行任何目标机脚本。
+# APK v3 使用 apk-tools 提取。这里仅提取 payload，不执行目标 OpenWrt 的安装脚本。
 command -v docker >/dev/null 2>&1 || { echo "ERROR: 构建机没有 Docker，无法提取 APK v3 包"; exit 1; }
 
-for item in \
-  "luci-app-store-0.2.0-r3.apk:luci-app-store:0.2.0-r3" \
-  "luci-lib-taskd-1.0.25.apk:luci-lib-taskd:1.0.25" \
-  "luci-lib-xterm-4.18.0.apk:luci-lib-xterm:4.18.0" \
-  "taskd-1.0.3-r2.apk:taskd:1.0.3-r2"; do
-  IFS=':' read -r apk pkg ver <<< "${item}"
-  PKG_DIR="${ISTORE_PACKAGE_DIR}/${pkg}"
-  mkdir -p "${PKG_DIR}/root"
+extract_apk() {
+  local apk="$1"
+  local pkg="$2"
+  local out="${ISTORE_PACKAGE_DIR}/${pkg}/root"
+  mkdir -p "${out}"
   docker run --rm \
     -v "${ISTORE_DIR}:/input:ro" \
-    -v "${PKG_DIR}/root:/output" \
+    -v "${out}:/output" \
     alpine:latest \
     apk extract --allow-untrusted --destination /output "/input/${apk}"
-done
+  [ -n "$(find "${out}" -mindepth 1 -print -quit)" ] || {
+    echo "ERROR: ${pkg} APK 提取后为空"
+    exit 1
+  }
+}
 
-# 生成本地 OpenWrt 包定义。
-# 这些包的文件来自你指定的 .run；构建阶段重新封装为 ImmortalWrt 原生 APK，
-# 因而最终固件会在正常 package/install 阶段把它们写入 rootfs，无需首次开机联网。
-cat > "${ISTORE_PACKAGE_DIR}/Makefile" <<'EOF'
+extract_apk luci-app-store-0.2.0-r3.apk luci-app-store
+extract_apk luci-lib-taskd-1.0.25.apk luci-lib-taskd
+extract_apk luci-lib-xterm-4.18.0.apk luci-lib-xterm
+extract_apk taskd-1.0.3-r2.apk taskd
+
+# 每个离线 APK 单独转换为 OpenWrt 本地 package。
+# 这样它们会走 ImmortalWrt 正常的 package/install 阶段，首次开机无需联网。
+cat > "${ISTORE_PACKAGE_DIR}/luci-app-store/Makefile" <<'EOF'
 include $(TOPDIR)/rules.mk
-
 include $(INCLUDE_DIR)/package.mk
 
-PKGARCH:=all
-
-# iStore 主程序
 PKG_NAME:=luci-app-store
 PKG_VERSION:=0.2.0-r3
 PKG_RELEASE:=1
+PKGARCH:=all
 
 define Package/luci-app-store
   SECTION:=luci
@@ -148,16 +149,66 @@ define Package/luci-app-store
   SUBMENU:=Applications
   TITLE:=LuCI based iStore
   DEPENDS:=+curl +tar +libuci-lua +mount-utils +luci-lib-taskd +apk +luci-compat
-  PKGARCH:=all
 endef
 
 define Package/luci-app-store/install
-	$(CP) ./luci-app-store/root/* $(1)/
+	$(CP) ./root/* $(1)/
 endef
 
 $(eval $(call BuildPackage,luci-app-store))
+EOF
 
-# taskd
+cat > "${ISTORE_PACKAGE_DIR}/luci-lib-taskd/Makefile" <<'EOF'
+include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/package.mk
+
+PKG_NAME:=luci-lib-taskd
+PKG_VERSION:=1.0.25
+PKG_RELEASE:=1
+PKGARCH:=all
+
+define Package/luci-lib-taskd
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=Libraries
+  TITLE:=LuCI taskd library
+  DEPENDS:=+taskd +luci-lib-xterm +luci-lua-runtime
+endef
+
+define Package/luci-lib-taskd/install
+	$(CP) ./root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,luci-lib-taskd))
+EOF
+
+cat > "${ISTORE_PACKAGE_DIR}/luci-lib-xterm/Makefile" <<'EOF'
+include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/package.mk
+
+PKG_NAME:=luci-lib-xterm
+PKG_VERSION:=4.18.0
+PKG_RELEASE:=1
+PKGARCH:=all
+
+define Package/luci-lib-xterm
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=Libraries
+  TITLE:=LuCI xterm library
+endef
+
+define Package/luci-lib-xterm/install
+	$(CP) ./root/* $(1)/
+endef
+
+$(eval $(call BuildPackage,luci-lib-xterm))
+EOF
+
+cat > "${ISTORE_PACKAGE_DIR}/taskd/Makefile" <<'EOF'
+include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/package.mk
+
 PKG_NAME:=taskd
 PKG_VERSION:=1.0.3-r2
 PKG_RELEASE:=1
@@ -169,54 +220,11 @@ define Package/taskd
 endef
 
 define Package/taskd/install
-	$(CP) ./taskd/root/* $(1)/
+	$(CP) ./root/* $(1)/
 endef
 
 $(eval $(call BuildPackage,taskd))
-
-# luci-lib-taskd
-PKG_NAME:=luci-lib-taskd
-PKG_VERSION:=1.0.25
-PKG_RELEASE:=1
-
-define Package/luci-lib-taskd
-  SECTION:=luci
-  CATEGORY:=LuCI
-  SUBMENU:=Libraries
-  TITLE:=LuCI taskd library
-  DEPENDS:=+taskd +luci-lib-xterm +luci-lua-runtime
-  PKGARCH:=all
-endef
-
-define Package/luci-lib-taskd/install
-	$(CP) ./luci-lib-taskd/root/* $(1)/
-endef
-
-$(eval $(call BuildPackage,luci-lib-taskd))
-
-# luci-lib-xterm
-PKG_NAME:=luci-lib-xterm
-PKG_VERSION:=4.18.0
-PKG_RELEASE:=1
-
-define Package/luci-lib-xterm
-  SECTION:=luci
-  CATEGORY:=LuCI
-  SUBMENU:=Libraries
-  TITLE:=LuCI xterm library
-  PKGARCH:=all
-endef
-
-define Package/luci-lib-xterm/install
-	$(CP) ./luci-lib-xterm/root/* $(1)/
-endef
-
-$(eval $(call BuildPackage,luci-lib-xterm))
 EOF
-
-# 使本地包目录参与 feeds/config 解析
-./scripts/feeds install -f -p luci luci-base >/dev/null 2>&1 || true
-
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
