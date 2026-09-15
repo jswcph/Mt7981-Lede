@@ -1,13 +1,18 @@
 #!/bin/bash
 #=================================================
 # part1.sh
-# ImmortalWrt 源码 + Feeds + Mihomo Meta
+# ImmortalWrt 源码 + Feeds + iStore 离线包 + Mihomo Meta
 #=================================================
 set -e
 
 REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
 REPO_BRANCH="${REPO_BRANCH:-master}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
+
+ISTORE_RUN_URL="https://github.com/wkccd/CloudRunFilesBuilder/releases/download/2026-06-18/25-luci-app-store-0.2.0-r3_all.run"
+ISTORE_RUN="${SRC_DIR}/../25-luci-app-store-0.2.0-r3_all.run"
+ISTORE_DIR="${SRC_DIR}/../istore-offline"
+
 
 echo "==============================================="
 echo "  ImmortalWrt Build Environment"
@@ -58,8 +63,6 @@ src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
 src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-src-git istore https://github.com/linkease/istore;main
-src-git istore_packages https://github.com/linkease/istore-packages;main
 EOF
 
 ./scripts/feeds clean
@@ -78,6 +81,35 @@ echo "Package Manager: package/feeds/luci/luci-app-package-manager"
 echo "PassWall: package/feeds/passwall/luci-app-passwall"
 echo "OpenClash: package/feeds/openclash/luci-app-openclash"
 echo "Argon: package/feeds/luci_theme_argon"
+
+echo "==== 下载并解包 iStore 离线安装包 ===="
+rm -rf "${ISTORE_DIR}"
+mkdir -p "${ISTORE_DIR}"
+wget -q --show-progress "${ISTORE_RUN_URL}" -O "${ISTORE_RUN}"
+chmod 0755 "${ISTORE_RUN}"
+
+# Makeself 自解压包：只解包，不执行 install25.sh。
+# 这样不会在 Ubuntu 构建机上误执行目标 OpenWrt 的 apk 安装逻辑。
+if ! "${ISTORE_RUN}" --noexec --target "${ISTORE_DIR}" >/tmp/istore-extract.log 2>&1; then
+  echo "ERROR: iStore .run 解包失败"
+  cat /tmp/istore-extract.log
+  exit 1
+fi
+
+for apk in \
+  luci-app-store-0.2.0-r3.apk \
+  luci-lib-taskd-1.0.25.apk \
+  luci-lib-xterm-4.18.0.apk \
+  taskd-1.0.3-r2.apk; do
+  if [ ! -f "${ISTORE_DIR}/${apk}" ]; then
+    echo "ERROR: iStore 离线包缺少 ${apk}"
+    find "${ISTORE_DIR}" -maxdepth 2 -type f -print
+    exit 1
+  fi
+done
+
+echo "iStore 离线 APK："
+ls -lh "${ISTORE_DIR}"/*.apk
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
@@ -111,5 +143,6 @@ echo "==============================================="
 echo "  part1.sh 完成"
 echo "==============================================="
 echo "ImmortalWrt：${SRC_DIR}"
+echo "iStore APK：${ISTORE_DIR}"
 echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
