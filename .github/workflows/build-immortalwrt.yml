@@ -24,7 +24,7 @@ on:
           - jcg_q30-pro
           - cmcc_xr30-nand
           - xiaomi_redmi-router-ax6000
-          
+
       repo_url:
         description: '源码仓库地址（ImmortalWrt）'
         required: false
@@ -121,12 +121,14 @@ jobs:
       - name: 开始编译固件
         run: |
           cd "$WORKDIR/openwrt"
-          echo "使用 2 线程编译，设备：$DEVICE"
-          make -j2 V=sc
-          if [ $? -ne 0 ]; then
-            echo "2线程编译失败，降级为单线程..."
+          JOBS="${BUILD_JOBS:-4}"
+          echo "使用 ${JOBS} 线程编译，设备：$DEVICE"
+          if ! make -j"${JOBS}" V=sc; then
+            echo "${JOBS}线程编译失败，降级为单线程重试..."
             make -j1 V=sc
           fi
+        env:
+          BUILD_JOBS: 4
         timeout-minutes: 300
 
       - name: 整理固件产物
