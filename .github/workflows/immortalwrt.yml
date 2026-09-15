@@ -1,0 +1,183 @@
+name: Build ImmortalWrt - H3C NX30 Pro / Ruijie X60
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的设备'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - h3c_magic-nx30-pro
+          - ruijie_rg-x60
+  schedule:
+    - cron: '0 14 * * 0'
+
+env:
+  TZ: Asia/Shanghai
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: master
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: 生成构建矩阵
+        id: matrix
+        shell: bash
+        run: |
+          device='${{ github.event.inputs.device }}'
+          if [ -z "$device" ] || [ "$device" = "all" ]; then
+            echo 'matrix={"device":["h3c_magic-nx30-pro","ruijie_rg-x60"]}' >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"device\":[\"$device\"]}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出本项目
+        uses: actions/checkout@v4
+        with:
+          ref: immortalwrt
+
+      - name: 释放磁盘并准备工作目录
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
+          build-mount-path: /mnt/build
+
+      - name: 设置工作目录
+        shell: bash
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown "$USER:$USER" /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: 准备 ImmortalWrt 与第三方组件
+        shell: bash
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/scripts/part1.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+        env:
+          SRC_DIR: /mnt/build/work/openwrt
+
+      - name: 写入设备配置
+        shell: bash
+        run: |
+          chmod +x "$GITHUB_WORKSPACE/scripts/part2.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+        env:
+          SRC_DIR: /mnt/build/work/openwrt
+
+      - name: 检查最终配置
+        shell: bash
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "DEVICE=$DEVICE"
+          echo "SOURCE=$REPO_URL"
+          echo "BRANCH=$REPO_BRANCH"
+          echo '===== Target / Wi-Fi ====='
+          grep -E '^CONFIG_TARGET_(mediatek|airoha)|^CONFIG_TARGET.*DEVICE|^CONFIG_PACKAGE_(wpad-openssl|wifi-scripts|wireless-regdb|iw|kmod-cfg80211|kmod-mac80211|kmod-mt7915e|kmod-mt7981-firmware|mt7981-wo-firmware|kmod-mt7986-firmware|mt7986-wo-firmware)=' .config || true
+          echo '===== Package Manager / 中文 / iStore ====='
+          grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-store|luci-app-opkg))=' .config || true
+          echo '===== 默认系统设置 ====='
+          grep -nE 'OpenWrt|192\.168\.6\.1|zh_cn' "$WORKDIR/openwrt/files/etc/uci-defaults/99-custom-settings" || true
+
+      - name: 下载源码包
+        shell: bash
+        run: |
+          cd "$WORKDIR/openwrt"
+          make download -j"$(nproc)"
+          find dl -type f -size -1024c -delete
+
+      - name: 编译固件
+        shell: bash
+        run: |
+          cd "$WORKDIR/openwrt"
+          echo "===== 开始编译 $DEVICE ====="
+          if make -j"$(nproc)" V=sc; then
+            echo '===== 多线程编译成功 ====='
+          else
+            echo '===== 多线程失败，改用单线程重编 ====='
+            make -j1 V=sc
+          fi
+
+      - name: 整理并上传固件
+        shell: bash
+        run: |
+          set -e
+          OUT="$GITHUB_WORKSPACE/firmware/$DEVICE"
+          mkdir -p "$OUT"
+          cd "$WORKDIR/openwrt/bin/targets"
+          find . -type f \( \
+            -iname '*sysupgrade*' -o -iname '*factory*' -o \
+            -iname '*recovery*' -o -iname '*.img.gz' -o \
+            -iname '*.itb' -o -iname '*.bin' \
+          \) -exec cp {} "$OUT/" \;
+          cp "$WORKDIR/openwrt/.config" "$OUT/config-$DEVICE.seed"
+          find "$OUT" -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 上传 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出本项目
+        uses: actions/checkout@v4
+        with:
+          ref: immortalwrt
+
+      - name: 下载全部 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware
+
+      - name: 整理 Release
+        id: release
+        shell: bash
+        run: |
+          set -e
+          mkdir -p release
+          find firmware -type f \( \
+            -iname '*sysupgrade*' -o -iname '*factory*' -o \
+            -iname '*recovery*' -o -iname '*.img.gz' -o \
+            -iname '*.itb' -o -iname '*.bin' -o -iname '*.seed' \
+          \) -exec cp {} release/ \;
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
+          echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          find release -maxdepth 1 -type f -printf '%f\n' | sort
+
+      - name: 发布 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ImmortalWrt WiFi Router ${{ steps.release.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: release/*
