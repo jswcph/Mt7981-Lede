@@ -44,5 +44,8 @@ uci commit network
 
 (echo 'password'; sleep 1; echo 'password') | passwd root >/dev/null 2>&1
 
+uci set luci.main.lang='zh_cn'
+uci commit luci
+
 logger -t custom-firstboot "首次启动自定义配置完成: lan1=WAN, lan2/lan3/lan4=br-lan, LAN=192.168.6.1"
 exit 0
