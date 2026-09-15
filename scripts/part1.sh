@@ -1,6 +1,6 @@
 #!/bin/bash
 #=================================================
-# part1.sh - Nokia XG-040G ImmortalWrt
+# part1.sh - ImmortalWrt Wi-Fi Router
 # ImmortalWrt + Feeds + Mihomo Meta
 # iStore 已彻底移除
 #=================================================
@@ -9,14 +9,16 @@ set -e
 REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
 REPO_BRANCH="${REPO_BRANCH:-master}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
+BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
 
 echo "==============================================="
 echo "  ImmortalWrt Build Environment"
 echo "==============================================="
 echo "源码：${REPO_URL}"
 echo "分支：${REPO_BRANCH}"
+echo "设备：${DEVICE:-unknown}"
 
-echo "==== [1/4] 安装编译依赖 ===="
+echo "==== [1/5] 安装编译依赖 ===="
 sudo -E apt-get -qq update
 sudo -E apt-get -qq install -y \
   ack antlr3 aria2 asciidoc autoconf automake autopoint binutils bison \
@@ -47,13 +49,35 @@ if [ "$(command -v go)" != "/usr/local/go/bin/go" ]; then
   exit 1
 fi
 
-echo "==== [2/4] 克隆 ImmortalWrt ===="
+echo "==== [2/5] 克隆 ImmortalWrt ===="
 rm -rf "${SRC_DIR}"
 git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" \
   "${REPO_URL}" "${SRC_DIR}"
 cd "${SRC_DIR}"
 
-echo "==== [3/4] 配置第三方 Feeds ===="
+echo "==== [3/5] 应用已验证的 UBI 分区补丁 ===="
+PATCH_DIR="${BASE_DIR}/patches"
+case "${DEVICE:-}" in
+  h3c_magic-nx30-pro)
+    PATCH_FILE="${PATCH_DIR}/991-h3c-magic-nx30-pro-112m.patch"
+    ;;
+  ruijie_rg-x60)
+    PATCH_FILE="${PATCH_DIR}/990-ruijie-rg-x60-107m.patch"
+    ;;
+  *)
+    echo "ERROR: 不支持的设备：${DEVICE:-未指定}"
+    exit 1
+    ;;
+esac
+
+[ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁 ${PATCH_FILE}"; exit 1; }
+
+echo "使用补丁：${PATCH_FILE}"
+git apply --check "${PATCH_FILE}"
+git apply "${PATCH_FILE}"
+echo "UBI 分区补丁应用成功"
+
+echo "==== [4/5] 配置第三方 Feeds ===="
 cat >> feeds.conf.default <<'EOF'
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
@@ -92,7 +116,7 @@ echo "Sing-box: OK"
 echo "OpenClash: OK"
 echo "Argon: OK"
 
-echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
+echo "==== [5/5] 编译 Mihomo Meta ARM64 ===="
 rm -rf mihomo
 
 git clone --depth=1 --single-branch --branch Meta \
@@ -126,5 +150,7 @@ echo "==============================================="
 echo "  part1.sh 完成"
 echo "==============================================="
 echo "ImmortalWrt：${SRC_DIR}"
+echo "设备：${DEVICE:-unknown}"
+echo "UBI 补丁：${PATCH_FILE}"
 echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
