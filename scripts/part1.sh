@@ -55,6 +55,21 @@ git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" \
   "${REPO_URL}" "${SRC_DIR}"
 cd "${SRC_DIR}"
 
+# ImmortalWrt 24.10 的 APK 选项默认被标记为 BROKEN，因此 make defconfig
+# 会无条件清掉 CONFIG_USE_APK。当前项目明确需要 APK + luci-app-package-manager，
+# 所以只解除 USE_APK 这一项的 BROKEN 限制，不修改其它 Kconfig 行为。
+python3 - <<'PY'
+from pathlib import Path
+p = Path("config/Config-build.in")
+s = p.read_text()
+old = '''\tconfig USE_APK\n\t\timply PACKAGE_apk-mbedtls\n\t\tbool "Use APK instead of OPKG to build distribution (BROKEN)"\n\t\tdepends on BROKEN'''
+new = '''\tconfig USE_APK\n\t\timply PACKAGE_apk-mbedtls\n\t\tbool "Use APK instead of OPKG to build distribution"'''
+if s.count(old) != 1:
+    raise SystemExit(f"ERROR: USE_APK Kconfig 匹配数异常: {s.count(old)}")
+p.write_text(s.replace(old, new, 1))
+PY
+echo "APK Kconfig：已解除 USE_APK 的 BROKEN 限制"
+
 echo "==== [3/5] 调整 UBI 分区布局 ===="
 case "${DEVICE:-}" in
   h3c_magic-nx30-pro)
@@ -66,27 +81,20 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text()
-
 old_reg = "\t\t\t\treg = <0x0580000 0x4000000>;"
 new_reg = "\t\t\t\treg = <0x0580000 0x7000000>;"
-
 if text.count(old_reg) != 1:
     raise SystemExit(f"ERROR: NX30 Pro 原始 UBI reg 匹配数异常: {text.count(old_reg)}")
-
 text = text.replace(old_reg, new_reg, 1)
-
 old_partitions = r'''\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4580000 \{\n\t\t\t\tlabel = "pdt_data";\n\t\t\t\treg = <0x4580000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4b80000 \{\n\t\t\t\tlabel = "pdt_data_1";\n\t\t\t\treg = <0x4b80000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5180000 \{\n\t\t\t\tlabel = "exp";\n\t\t\t\treg = <0x5180000 0x0100000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5280000 \{\n\t\t\t\tlabel = "plugin";\n\t\t\t\treg = <0x5280000 0x2580000>;\n\t\t\t\tread-only;\n\t\t\t\};'''
-
 text, removed = re.subn(old_partitions, "", text, count=1)
 if removed != 1:
     raise SystemExit(f"ERROR: NX30 Pro 旧分区块删除失败，匹配数: {removed}")
-
 if text.count(new_reg) != 1:
     raise SystemExit(f"ERROR: NX30 Pro 新 UBI reg 验证失败: {text.count(new_reg)}")
 for label in ("pdt_data", "pdt_data_1", 'label = "exp"', 'label = "plugin"'):
     if label in text:
         raise SystemExit(f"ERROR: NX30 Pro 旧分区仍存在: {label}")
-
 path.write_text(text)
 PY
     echo "NX30 Pro UBI: 0x0580000 + 0x7000000"
@@ -96,20 +104,15 @@ PY
     python3 - "${DTS_FILE}" <<'PY'
 import sys
 from pathlib import Path
-
 path = Path(sys.argv[1])
 text = path.read_text()
 old = "\t\t\t\treg = <0x680000 0x3f00000>;"
 new = "\t\t\t\treg = <0x680000 0x6b00000>;"
-
 if text.count(old) != 1:
     raise SystemExit(f"ERROR: X60 原始 UBI reg 匹配数异常: {text.count(old)}")
-
 text = text.replace(old, new, 1)
-
 if text.count(new) != 1:
     raise SystemExit(f"ERROR: X60 新 UBI reg 验证失败: {text.count(new)}")
-
 path.write_text(text)
 PY
     echo "X60 UBI: 0x680000 + 0x6b00000"
@@ -121,7 +124,6 @@ PY
 esac
 
 echo "UBI 分区布局调整成功"
-
 echo "===== UBI 分区验证 ====="
 case "${DEVICE:-}" in
   h3c_magic-nx30-pro)
@@ -151,9 +153,6 @@ EOF
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-# scripts/feeds 在部分情况下只更新 feed 索引，但没有创建 package/feeds 下的符号链接。
-# 这里对本次构建明确依赖的 PassWall 包做兜底，避免出现：
-# package/feeds/passwall_packages/xray-core/Makefile 缺失。
 for pkg in xray-core sing-box; do
   if [ ! -f "package/feeds/passwall_packages/${pkg}/Makefile" ]; then
     if [ ! -f "feeds/passwall_packages/${pkg}/Makefile" ]; then
@@ -165,9 +164,6 @@ for pkg in xray-core sing-box; do
   fi
 done
 
-# PassWall feed 在当前仓库的 luci-app-passwall/Makefile 是有效的。
-# 如果 scripts/feeds 没有创建 package/feeds/passwall 下的链接，则手动补齐该链接，
-# 避免仅因 feeds 安装索引/链接异常导致构建直接中止。
 if [ ! -f "package/feeds/passwall/luci-app-passwall/Makefile" ]; then
   if [ ! -f "feeds/passwall/luci-app-passwall/Makefile" ]; then
     echo "ERROR: PassWall 源码缺失：feeds/passwall/luci-app-passwall/Makefile"
@@ -177,8 +173,6 @@ if [ ! -f "package/feeds/passwall/luci-app-passwall/Makefile" ]; then
   ln -sfn ../../../feeds/passwall/luci-app-passwall package/feeds/passwall/luci-app-passwall
 fi
 
-# OpenClash 同样可能因 scripts/feeds 的安装/链接行为导致 package/feeds/openclash 下没有链接。
-# 上游 OpenClash 的 luci-app-openclash/Makefile 存在，因此这里补齐同一目录结构。
 if [ ! -f "package/feeds/openclash/luci-app-openclash/Makefile" ]; then
   if [ ! -f "feeds/openclash/luci-app-openclash/Makefile" ]; then
     echo "ERROR: OpenClash 源码缺失：feeds/openclash/luci-app-openclash/Makefile"
@@ -210,7 +204,6 @@ echo "Argon: OK"
 
 echo "==== [5/5] 编译 Mihomo Meta ARM64 ===="
 rm -rf mihomo
-
 git clone --depth=1 --single-branch --branch Meta \
   https://github.com/MetaCubeX/mihomo.git mihomo
 cd "${SRC_DIR}/mihomo"
@@ -218,11 +211,8 @@ echo "Mihomo branch: $(git branch --show-current)"
 echo "Mihomo commit: $(git rev-parse --short HEAD)"
 go mod download
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-  go build \
-    -tags with_gvisor \
-    -trimpath \
-    -ldflags "-s -w" \
-    -o "${SRC_DIR}/clash_meta"
+  go build -tags with_gvisor -trimpath -ldflags "-s -w" \
+  -o "${SRC_DIR}/clash_meta"
 
 if [ ! -f "${SRC_DIR}/clash_meta" ]; then
   echo "ERROR: Mihomo Meta 编译失败"
