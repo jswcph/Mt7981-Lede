@@ -75,7 +75,6 @@ if text.count(old_reg) != 1:
 
 text = text.replace(old_reg, new_reg, 1)
 
-# 删除原始 UBI 后面的四个旧 YAFFS/扩展分区，保留 UBI 及其 volumes。
 old_partitions = r'''\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4580000 \{\n\t\t\t\tlabel = "pdt_data";\n\t\t\t\treg = <0x4580000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4b80000 \{\n\t\t\t\tlabel = "pdt_data_1";\n\t\t\t\treg = <0x4b80000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5180000 \{\n\t\t\t\tlabel = "exp";\n\t\t\t\treg = <0x5180000 0x0100000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5280000 \{\n\t\t\t\tlabel = "plugin";\n\t\t\t\treg = <0x5280000 0x2580000>;\n\t\t\t\tread-only;\n\t\t\t\};'''
 
 text, removed = re.subn(old_partitions, "", text, count=1)
@@ -151,6 +150,18 @@ EOF
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
+
+# PassWall feed 在当前仓库的 luci-app-passwall/Makefile 是有效的。
+# 如果 scripts/feeds 没有创建 package/feeds/passwall 下的链接，则手动补齐该链接，
+# 避免仅因 feeds 安装索引/链接异常导致构建直接中止。
+if [ ! -f "package/feeds/passwall/luci-app-passwall/Makefile" ]; then
+  if [ ! -f "feeds/passwall/luci-app-passwall/Makefile" ]; then
+    echo "ERROR: PassWall 源码缺失：feeds/passwall/luci-app-passwall/Makefile"
+    exit 1
+  fi
+  mkdir -p package/feeds/passwall
+  ln -sfn ../../../feeds/passwall/luci-app-passwall package/feeds/passwall/luci-app-passwall
+fi
 
 echo "==== Feeds 检查 ===="
 for path in \
