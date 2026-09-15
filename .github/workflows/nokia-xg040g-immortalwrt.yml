@@ -56,7 +56,18 @@ jobs:
         with:
           ref: nokia-xg040g-immortalwrt
 
-      - name: 释放磁盘并准备工作目录
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: 释放磁盘并扩容工作空间
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 2048
@@ -179,7 +190,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: Nokia XG-040G-MD/MF ImmortalWrt ${{ steps.release.outputs.tag }}
+          tag_name: firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}
+          name: Nokia XG-040G-MD/MF ImmortalWrt firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}
           body_path: RELEASE_NOTES.md
           files: release/*
