@@ -67,8 +67,8 @@ from pathlib import Path
 path = Path(sys.argv[1])
 text = path.read_text()
 
-old_reg = "\\t\\t\\t\\treg = <0x0580000 0x4000000>;"
-new_reg = "\\t\\t\\t\\treg = <0x0580000 0x7000000>;"
+old_reg = "\t\t\t\treg = <0x0580000 0x4000000>;"
+new_reg = "\t\t\t\treg = <0x0580000 0x7000000>;"
 
 if text.count(old_reg) != 1:
     raise SystemExit(f"ERROR: NX30 Pro 原始 UBI reg 匹配数异常: {text.count(old_reg)}")
@@ -100,8 +100,8 @@ from pathlib import Path
 
 path = Path(sys.argv[1])
 text = path.read_text()
-old = "\\t\\t\\t\\treg = <0x680000 0x3f00000>;"
-new = "\\t\\t\\t\\treg = <0x680000 0x6b00000>;"
+old = "\t\t\t\treg = <0x680000 0x3f00000>;"
+new = "\t\t\t\treg = <0x680000 0x6b00000>;"
 
 if text.count(old) != 1:
     raise SystemExit(f"ERROR: X60 原始 UBI reg 匹配数异常: {text.count(old)}")
