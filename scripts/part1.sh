@@ -76,14 +76,16 @@ git clone --depth=1 --single-branch --branch master \
   https://github.com/jerrykuku/luci-app-argon-config.git \
   package/luci-app-argon-config
 
-# 只安装本次实际需要的第三方组件，避免 feeds install -a
-# 触发 bmx7/babeld/dcwapd 等未选用组件的无效依赖警告。
+# 安装本次实际需要的 LuCI / 第三方组件。
+# package-manager 属于 LuCI feed；必须先 install，否则 make defconfig 会把未知的
+# CONFIG_PACKAGE_luci-app-package-manager 从最终 .config 中删除。
+./scripts/feeds install -d y -p luci luci-app-package-manager luci-i18n-package-manager-zh-cn
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 
-# Argon 直接位于 package/，无需 feed install。
 for path in \
+  "package/luci-app-package-manager/Makefile" \
   "package/luci-theme-argon/Makefile" \
   "package/luci-app-argon-config/Makefile" \
   "package/feeds/passwall/luci-app-passwall/Makefile" \
@@ -97,6 +99,7 @@ for path in \
 done
 
 echo "==== Feeds / Package 检查 ===="
+echo "Package Manager: OK"
 echo "Argon Theme: OK"
 echo "Argon Config: OK"
 echo "PassWall: OK"
