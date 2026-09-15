@@ -177,6 +177,17 @@ if [ ! -f "package/feeds/passwall/luci-app-passwall/Makefile" ]; then
   ln -sfn ../../../feeds/passwall/luci-app-passwall package/feeds/passwall/luci-app-passwall
 fi
 
+# OpenClash 同样可能因 scripts/feeds 的安装/链接行为导致 package/feeds/openclash 下没有链接。
+# 上游 OpenClash 的 luci-app-openclash/Makefile 存在，因此这里补齐同一目录结构。
+if [ ! -f "package/feeds/openclash/luci-app-openclash/Makefile" ]; then
+  if [ ! -f "feeds/openclash/luci-app-openclash/Makefile" ]; then
+    echo "ERROR: OpenClash 源码缺失：feeds/openclash/luci-app-openclash/Makefile"
+    exit 1
+  fi
+  mkdir -p package/feeds/openclash
+  ln -sfn ../../../feeds/openclash/luci-app-openclash package/feeds/openclash/luci-app-openclash
+fi
+
 echo "==== Feeds 检查 ===="
 for path in \
   "package/feeds/luci/luci-app-package-manager/Makefile" \
