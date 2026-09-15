@@ -56,17 +56,6 @@ jobs:
         with:
           ref: nokia-xg040g-immortalwrt
 
-      # 先清理，再扩容；避免在 /mnt/build 创建后才清理根盘。
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
 
       - name: 清理 APT 缓存与临时文件
         shell: bash
@@ -98,6 +87,17 @@ jobs:
           sudo mkdir -p /mnt/build/work
           sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: 准备 ImmortalWrt 与第三方组件
         shell: bash
