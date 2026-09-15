@@ -58,23 +58,34 @@ cat >> feeds.conf.default <<'EOF'
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
-src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
 EOF
 
 ./scripts/feeds clean
 ./scripts/feeds update -a
-./scripts/feeds install -a
 
-# 第三方组件定向安装
-./scripts/feeds install -d y -p luci luci-app-package-manager
+# 不再使用 luci_theme_argon feed。
+# Argon 官方仓库当前是根目录 Makefile，Argon Config 是独立仓库；
+# 直接放入 package/ 可避免 "Ignoring feed ... - index missing"。
+rm -rf package/luci-theme-argon package/luci-app-argon-config
+
+git clone --depth=1 --single-branch --branch master \
+  https://github.com/jerrykuku/luci-theme-argon.git \
+  package/luci-theme-argon
+
+git clone --depth=1 --single-branch --branch master \
+  https://github.com/jerrykuku/luci-app-argon-config.git \
+  package/luci-app-argon-config
+
+# 只安装本次实际需要的第三方组件，避免 feeds install -a
+# 触发 bmx7/babeld/dcwapd 等未选用组件的无效依赖警告。
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
-./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-echo "==== Feeds 检查 ===="
+# Argon 直接位于 package/，无需 feed install。
 for path in \
-  "package/feeds/luci/luci-app-package-manager/Makefile" \
+  "package/luci-theme-argon/Makefile" \
+  "package/luci-app-argon-config/Makefile" \
   "package/feeds/passwall/luci-app-passwall/Makefile" \
   "package/feeds/passwall_packages/xray-core/Makefile" \
   "package/feeds/passwall_packages/sing-box/Makefile" \
@@ -85,12 +96,13 @@ for path in \
   fi
 done
 
-echo "Package Manager: OK"
+echo "==== Feeds / Package 检查 ===="
+echo "Argon Theme: OK"
+echo "Argon Config: OK"
 echo "PassWall: OK"
 echo "Xray: OK"
 echo "Sing-box: OK"
 echo "OpenClash: OK"
-echo "Argon: OK"
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 rm -rf mihomo
