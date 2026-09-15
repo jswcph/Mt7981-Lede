@@ -1,23 +1,21 @@
 name: Build Nokia XG-040G-MD/MF
 
 on:
-  schedule:
-    # 每周日 22:00 北京时间 = UTC 周日 14:00
-    - cron: '0 14 * * 0'
-
   workflow_dispatch:
     inputs:
       device:
         description: '选择要编译的 Nokia XG-040G 设备'
         required: true
-        default: 'all'
         type: choice
+        default: all
         options:
           - all
           - nokia_xg-040g-md
           - nokia_xg-040g-md-ubi
           - nokia_xg-040g-mf
           - nokia_xg-040g-mf-ubi
+  schedule:
+    - cron: '0 14 * * 0'
 
 env:
   TZ: Asia/Shanghai
@@ -31,130 +29,116 @@ jobs:
   prepare:
     runs-on: ubuntu-22.04
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
-      - name: 设置构建矩阵
-        id: set-matrix
+      - name: 生成构建矩阵
+        id: matrix
         shell: bash
         run: |
-          INPUT_DEVICE="${{ github.event.inputs.device }}"
-          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            MATRIX='{"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi"]}'
+          device='${{ github.event.inputs.device }}'
+          if [ -z "$device" ] || [ "$device" = "all" ]; then
+            echo 'matrix={"device":["nokia_xg-040g-md","nokia_xg-040g-md-ubi","nokia_xg-040g-mf","nokia_xg-040g-mf-ubi"]}' >> "$GITHUB_OUTPUT"
           else
-            MATRIX="{\"device\":[\"$INPUT_DEVICE\"]}"
+            echo "matrix={\"device\":[\"$device\"]}" >> "$GITHUB_OUTPUT"
           fi
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "构建矩阵：$MATRIX"
 
   build:
     needs: prepare
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       DEVICE: ${{ matrix.device }}
     steps:
-      - name: 检出本仓库
+      - name: 检出本项目
         uses: actions/checkout@v4
         with:
           ref: nokia-xg040g-immortalwrt
 
-      - name: 释放磁盘空间
+      - name: 释放磁盘并准备工作目录
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 2048
           swap-size-mb: 4096
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
+          remove-dotnet: true
+          remove-android: true
+          remove-haskell: true
+          remove-codeql: true
           build-mount-path: /mnt/build
 
-      - name: 调整工作目录到扩容分区
+      - name: 设置工作目录
+        shell: bash
         run: |
           sudo mkdir -p /mnt/build/work
-          sudo chown $USER:$USER /mnt/build/work
+          sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
-
-      - name: part1 - 准备 ImmortalWrt 编译环境与源码
+      - name: 准备 ImmortalWrt 与第三方组件
+        shell: bash
         run: |
-          chmod +x scripts/part1.sh
-          cd "$WORKDIR" || exit 1
+          chmod +x "$GITHUB_WORKSPACE/scripts/part1.sh"
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
         env:
-          SRC_DIR: ${{ env.WORKDIR }}/openwrt
-          REPO_URL: ${{ env.REPO_URL }}
-          REPO_BRANCH: ${{ env.REPO_BRANCH }}
+          SRC_DIR: /mnt/build/work/openwrt
 
-      - name: part2 - 写入 Nokia 设备与个性化配置
+      - name: 写入 Nokia 配置
+        shell: bash
         run: |
-          chmod +x scripts/part2.sh
+          chmod +x "$GITHUB_WORKSPACE/scripts/part2.sh"
           bash "$GITHUB_WORKSPACE/scripts/part2.sh"
         env:
-          SRC_DIR: ${{ env.WORKDIR }}/openwrt
-          DEVICE: ${{ matrix.device }}
+          SRC_DIR: /mnt/build/work/openwrt
 
-      - name: 校验最终设备配置
+      - name: 检查最终配置
+        shell: bash
         run: |
           cd "$WORKDIR/openwrt"
-          echo "==============================================="
-          echo "设备：$DEVICE"
-          echo "源码：$REPO_URL"
-          echo "分支：$REPO_BRANCH"
-          echo "==============================================="
+          echo "DEVICE=$DEVICE"
+          echo "SOURCE=$REPO_URL"
+          echo "BRANCH=$REPO_BRANCH"
+          echo '===== Target ====='
           grep -E '^CONFIG_TARGET_(airoha|mediatek)|^CONFIG_TARGET.*DEVICE' .config || true
-          echo "==============================================="
-          echo "检查 Nokia DTS："
-          find target/linux -type f \( -iname '*xg-040g*' -o -iname '*xg040g*' \) -print | sort
-          echo "==============================================="
-          echo "检查 USB / 存储 / USB 网卡 / NAS 配置："
-          grep -E '^CONFIG_PACKAGE_(kmod-usb|kmod-fs-|block-mount|usbutils|luci-app-samba4|samba4-|wsdd2)' .config || true
+          echo '===== Package Manager / 中文 / iStore ====='
+          grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-store|luci-app-opkg))=' .config || true
+          echo '===== Nokia 网络配置 ====='
+          grep -nE 'lan1|lan2|lan3|lan4|br-lan|192\.168\.6\.1' "$WORKDIR/openwrt/files/etc/uci-defaults/99-custom-settings" || true
 
-      - name: 下载编译所需依赖包
+      - name: 下载源码包
+        shell: bash
         run: |
           cd "$WORKDIR/openwrt"
-          make download -j$(nproc)
-          find dl -size -1024c -exec rm -f {} \;
-      - name: 开始编译固件
+          make download -j"$(nproc)"
+          find dl -type f -size -1024c -delete
+
+      - name: 编译固件
+        shell: bash
         run: |
           cd "$WORKDIR/openwrt"
-          echo "使用全部线程编译，设备：$DEVICE"
-          make -j$(nproc) V=sc
-          if [ $? -ne 0 ]; then
-            echo "多线程编译失败，降级为单线程..."
+          echo "===== 开始编译 $DEVICE ====="
+          if make -j"$(nproc)" V=sc; then
+            echo '===== 多线程编译成功 ====='
+          else
+            echo '===== 多线程失败，改用单线程重编 ====='
             make -j1 V=sc
           fi
-        
-      - name: 整理固件产物
+
+      - name: 整理并上传固件
+        shell: bash
         run: |
           set -e
-          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          OUT="$GITHUB_WORKSPACE/firmware/$DEVICE"
+          mkdir -p "$OUT"
           cd "$WORKDIR/openwrt/bin/targets"
           find . -type f \( \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*recovery*' -o \
-            -iname '*.img.gz' -o \
-            -iname '*.itb' -o \
-            -iname '*.bin' \
-          \) -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
-          cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed"
-          echo "===== ${DEVICE} 固件文件 ====="
-          find "$GITHUB_WORKSPACE/firmware/${DEVICE}" -maxdepth 1 -type f -printf '%f\n' | sort
+            -iname '*sysupgrade*' -o -iname '*factory*' -o \
+            -iname '*recovery*' -o -iname '*.img.gz' -o \
+            -iname '*.itb' -o -iname '*.bin' \
+          \) -exec cp {} "$OUT/" \;
+          cp "$WORKDIR/openwrt/.config" "$OUT/config-$DEVICE.seed"
+          find "$OUT" -maxdepth 1 -type f -printf '%f\n' | sort
 
-      - name: 上传固件为 Artifact
+      - name: 上传 Artifact
         uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ matrix.device }}
@@ -166,43 +150,36 @@ jobs:
     needs: build
     runs-on: ubuntu-22.04
     steps:
-      - name: 检出本仓库
+      - name: 检出本项目
         uses: actions/checkout@v4
         with:
           ref: nokia-xg040g-immortalwrt
 
-      - name: 下载所有固件 Artifact
+      - name: 下载全部 Artifact
         uses: actions/download-artifact@v4
         with:
           path: firmware
 
-      - name: 生成 Release 说明
-        run: |
-          chmod +x scripts/generate-release-notes.sh
-          bash scripts/generate-release-notes.sh
-
-      - name: 整理发布文件
-        id: meta
+      - name: 整理 Release
+        id: release
+        shell: bash
         run: |
           set -e
           mkdir -p release
           find firmware -type f \( \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*recovery*' -o \
-            -iname '*.img.gz' -o \
-            -iname '*.itb' -o \
-            -iname '*.bin' -o \
-            -iname '*.seed' \
+            -iname '*sysupgrade*' -o -iname '*factory*' -o \
+            -iname '*recovery*' -o -iname '*.img.gz' -o \
+            -iname '*.itb' -o -iname '*.bin' -o -iname '*.seed' \
           \) -exec cp {} release/ \;
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
           echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          echo "===== Release 文件 ====="
           find release -maxdepth 1 -type f -printf '%f\n' | sort
 
-      - name: 发布到 Release 页面
+      - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: Nokia XG-040G-MD/MF ImmortalWrt 固件 ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Nokia XG-040G-MD/MF ImmortalWrt ${{ steps.release.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
