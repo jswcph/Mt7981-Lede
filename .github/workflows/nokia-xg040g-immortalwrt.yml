@@ -67,10 +67,23 @@ jobs:
           docker-images: true
           swap-storage: false
 
+      - name: 清理 APT 缓存与临时文件
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get clean || true
+          sudo apt-get autoclean || true
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /tmp/*
+          sudo journalctl --vacuum-size=50M || true
+          echo '===== 清理后的磁盘空间 ====='
+          df -h /
+
       - name: 释放磁盘并扩容工作空间
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 2048
+          root-reserve-mb: 1024
           swap-size-mb: 4096
           remove-dotnet: true
           remove-android: true
@@ -190,7 +203,7 @@ jobs:
       - name: 发布 Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}
-          name: Nokia XG-040G-MD/MF ImmortalWrt firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: Nokia XG-040G-MD/MF ImmortalWrt ${{ steps.release.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
