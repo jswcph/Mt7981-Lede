@@ -58,12 +58,8 @@ src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
 src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-src-git istore https://github.com/linkease/istore;main
 EOF
 
-# 先清理旧的 feeds 链接，再完整更新并安装所有 feeds。
-# 这是 OpenWrt/ImmortalWrt 官方推荐的基础流程；后面的定向安装只用于
-# 明确保证第三方包已经落到 package/feeds/，避免只更新不安装。
 ./scripts/feeds clean
 ./scripts/feeds update -a
 ./scripts/feeds install -a
@@ -75,59 +71,11 @@ EOF
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-# =================================================
-# iStore：完整、可验证的独立安装链
-# =================================================
-# 官方集成方式是：
-#   feeds update istore
-#   feeds install -d y -p istore luci-app-store
-# 这里额外显式安装 iStore 自己的三个运行时组件，并在 defconfig 前
-# 检查源码、Makefile 和依赖声明，避免问题拖到 make defconfig 才发现。
-./scripts/feeds update istore
-./scripts/feeds install -d y -p istore \
-  luci-app-store \
-  luci-lib-taskd \
-  luci-lib-xterm \
-  taskd
-
-ISTORE_DIR="package/feeds/istore"
-ISTORE_APP="${ISTORE_DIR}/luci-app-store"
-ISTORE_TASKD="${ISTORE_DIR}/luci-lib-taskd"
-ISTORE_XTERM="${ISTORE_DIR}/luci-lib-xterm"
-ISTORE_TASK="${ISTORE_DIR}/taskd"
-
-for f in \
-  "${ISTORE_APP}/Makefile" \
-  "${ISTORE_TASKD}/Makefile" \
-  "${ISTORE_XTERM}/Makefile" \
-  "${ISTORE_TASK}/Makefile"; do
-  if [ ! -f "${f}" ]; then
-    echo "ERROR: iStore package 未正确安装：${f}"
-    exit 1
-  fi
-done
-
-echo "==== iStore 源码检查 ===="
-echo "luci-app-store: ${ISTORE_APP}/Makefile"
-grep -E '^(LUCI_DEPENDS|LUCI_EXTRA_DEPENDS|LUCI_PKGARCH):' "${ISTORE_APP}/Makefile" || true
-echo "luci-lib-taskd: ${ISTORE_TASKD}/Makefile"
-grep -E '^(LUCI_DEPENDS|LUCI_EXTRA_DEPENDS|LUCI_PKGARCH):' "${ISTORE_TASKD}/Makefile" || true
-echo "luci-lib-xterm: ${ISTORE_XTERM}/Makefile"
-grep -E '^(LUCI_DEPENDS|LUCI_EXTRA_DEPENDS|LUCI_PKGARCH):' "${ISTORE_XTERM}/Makefile" || true
-echo "taskd: ${ISTORE_TASK}/Makefile"
-grep -E '^(PKG_NAME|PKG_VERSION|PKGARCH|DEPENDS):' "${ISTORE_TASK}/Makefile" || true
-
-if ! grep -q 'LUCI_DEPENDS:.*luci-lib-taskd' "${ISTORE_APP}/Makefile"; then
-  echo "ERROR: luci-app-store Makefile 未声明 luci-lib-taskd 依赖"
-  exit 1
-fi
-
 echo "==== Feeds 检查通过 ===="
 echo "Package Manager: package/feeds/luci/luci-app-package-manager"
 echo "PassWall: package/feeds/passwall/luci-app-passwall"
 echo "OpenClash: package/feeds/openclash/luci-app-openclash"
 echo "Argon: package/feeds/luci_theme_argon"
-echo "iStore: ${ISTORE_APP}"
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
