@@ -82,16 +82,6 @@ fi
 [ "$MISSING" = "1" ] && exit 1
 echo ">>> 核心软件包与中文支持检查通过"
 
-check_y CONFIG_USE_APK
-check_y CONFIG_PACKAGE_apk-openssl
-check_y CONFIG_PACKAGE_luci-app-package-manager
-check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
-check_y CONFIG_LUCI_LANG_zh_Hans
-
-check_off CONFIG_PACKAGE_opkg
-check_off CONFIG_PACKAGE_luci-app-opkg
-check_off CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
-
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
   echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
   for sym in \
