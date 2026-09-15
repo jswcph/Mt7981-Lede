@@ -30,9 +30,6 @@ sudo -E apt-get -qq install -y \
 
 sudo timedatectl set-timezone "Asia/Shanghai" || true
 
-#=================================================
-# Go：Mihomo Meta 编译使用独立 Go
-#=================================================
 echo "==== 安装 Go ${GO_VERSION:-1.25.1} ===="
 GO_VERSION="${GO_VERSION:-1.25.1}"
 GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
@@ -49,18 +46,12 @@ if [ "$(command -v go)" != "/usr/local/go/bin/go" ]; then
   exit 1
 fi
 
-#=================================================
-# [2/4] 获取 ImmortalWrt 源码
-#=================================================
 echo "==== [2/4] 克隆 ImmortalWrt ===="
 rm -rf "${SRC_DIR}"
 git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" \
   "${REPO_URL}" "${SRC_DIR}"
 cd "${SRC_DIR}"
 
-#=================================================
-# [3/4] Feeds
-#=================================================
 echo "==== [3/4] 配置第三方 Feeds ===="
 cat >> feeds.conf.default <<'EOF'
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
@@ -72,22 +63,21 @@ EOF
 
 ./scripts/feeds update -a
 
-# ImmortalWrt 自带 luci feed 中的软件包必须显式 install，
-# 否则 package/feeds/luci 下不会生成 luci-app-package-manager，
-# 后续 make defconfig 会把 CONFIG_PACKAGE_luci-app-package-manager 清掉。
 ./scripts/feeds install -d y -p luci luci-app-package-manager
-
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-# 当前项目明确不安装 iStore，因此只注册 feed，不 install luci-app-store。
-# 这样不会把 iStore 带进最终固件。
+# iStore：必须显式 install，make defconfig 才能解析并保留 CONFIG_PACKAGE_luci-app-store。
+./scripts/feeds install -d y -p istore luci-app-store
 
-# 严格检查新版 LuCI 软件包管理器是否已经进入 package/feeds/luci。
 if [ ! -f "package/feeds/luci/luci-app-package-manager/Makefile" ]; then
   echo "ERROR: luci-app-package-manager 未成功安装到 package/feeds/luci"
+  exit 1
+fi
+if [ ! -f "package/feeds/istore/luci-app-store/Makefile" ]; then
+  echo "ERROR: luci-app-store 未成功安装到 package/feeds/istore"
   exit 1
 fi
 
@@ -96,11 +86,8 @@ echo "Package Manager: package/feeds/luci/luci-app-package-manager"
 echo "PassWall: package/feeds/passwall/luci-app-passwall"
 echo "OpenClash: package/feeds/openclash/luci-app-openclash"
 echo "Argon: package/feeds/luci_theme_argon"
-echo "iStore: disabled"
+echo "iStore: package/feeds/istore/luci-app-store"
 
-#=================================================
-# [4/4] 编译 Mihomo Meta ARM64
-#=================================================
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
 rm -rf mihomo
