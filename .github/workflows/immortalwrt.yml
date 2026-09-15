@@ -54,11 +54,34 @@ jobs:
         with:
           ref: immortalwrt
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
+      - name: 清理 APT 缓存与临时文件
+        shell: bash
+        run: |
+          set -e
+          sudo apt-get clean || true
+          sudo apt-get autoclean || true
+          sudo rm -rf /var/cache/apt/archives/*
+          sudo rm -rf /var/lib/apt/lists/*
+          sudo rm -rf /tmp/*
+          sudo journalctl --vacuum-size=50M || true
+          echo '===== 清理后的磁盘空间 ====='
+          df -h /
 
       - name: 释放磁盘并准备工作目录
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 2048
+          root-reserve-mb: 1024
           swap-size-mb: 4096
           remove-dotnet: true
           remove-android: true
@@ -73,16 +96,12 @@ jobs:
           sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
+      - name: 检查构建源版本
+        shell: bash
+        run: |
+          echo "REPO_URL=$REPO_URL"
+          echo "REPO_BRANCH=$REPO_BRANCH"
+          test "$REPO_BRANCH" = "openwrt-24.10"
 
       - name: 准备 ImmortalWrt 与第三方组件
         shell: bash
@@ -91,6 +110,7 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
         env:
           SRC_DIR: /mnt/build/work/openwrt
+          REPO_BRANCH: openwrt-24.10
 
       - name: 写入设备配置
         shell: bash
@@ -107,6 +127,8 @@ jobs:
           echo "DEVICE=$DEVICE"
           echo "SOURCE=$REPO_URL"
           echo "BRANCH=$REPO_BRANCH"
+          echo '===== Source Commit ====='
+          git rev-parse --short HEAD
           echo '===== Target / Wi-Fi ====='
           grep -E '^CONFIG_TARGET_(mediatek|airoha)|^CONFIG_TARGET.*DEVICE|^CONFIG_PACKAGE_(wpad-openssl|wifi-scripts|wireless-regdb|iw|kmod-cfg80211|kmod-mac80211|kmod-mt7915e|kmod-mt7981-firmware|mt7981-wo-firmware|kmod-mt7986-firmware|mt7986-wo-firmware)=' .config || true
           echo '===== Package Manager / 中文 / iStore ====='
