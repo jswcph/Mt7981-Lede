@@ -2,7 +2,6 @@
 #=================================================
 # part2.sh - Nokia XG-040G ImmortalWrt
 # 统一生成最终 .config、写入 files、执行一次 defconfig
-# ImmortalWrt master 使用 APK；不安装 iStore / 旧 opkg LuCI。
 #=================================================
 set -e
 
@@ -17,9 +16,6 @@ DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
 
-#-------------------------------------------------
-# 1. 合并配置
-#-------------------------------------------------
 echo "==== [1/4] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
@@ -30,7 +26,7 @@ CONFIG_USE_APK=y
 CONFIG_PACKAGE_apk-openssl=y
 # CONFIG_PACKAGE_opkg is not set
 
-# LuCI package manager（新版 APK/OPKG 通用软件包管理界面）
+# LuCI package manager
 CONFIG_PACKAGE_luci-app-package-manager=y
 CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 # CONFIG_PACKAGE_luci-app-opkg is not set
@@ -39,14 +35,11 @@ CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 # LuCI 简体中文
 CONFIG_LUCI_LANG_zh_Hans=y
 
-# iStore：本项目明确不安装
-# CONFIG_PACKAGE_luci-app-store is not set
-# CONFIG_PACKAGE_luci-i18n-store-zh-cn is not set
+# iStore
+CONFIG_PACKAGE_luci-app-store=y
+CONFIG_PACKAGE_luci-i18n-store-zh-cn=y
 EOF
 
-#-------------------------------------------------
-# 2. files overlay
-#-------------------------------------------------
 echo "==== [2/4] 准备 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
@@ -63,17 +56,11 @@ mkdir -p "$(dirname "${MIHOMO_DST}")"
 cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
 chmod 0755 "${MIHOMO_DST}"
 
-#-------------------------------------------------
-# 3. 最终依赖解析：只执行一次
-#-------------------------------------------------
 echo "==== [3/4] make defconfig ===="
 make defconfig
 
-#-------------------------------------------------
-# 4. 最终检查
-#-------------------------------------------------
 echo "==== [4/4] 检查最终 .config ===="
-grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store))=' .config || true
+grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store|luci-i18n-store-zh-cn))=' .config || true
 
 check_y() {
   grep -q "^$1=y$" .config || { echo "ERROR: $1 未进入最终 .config"; exit 1; }
@@ -93,13 +80,12 @@ check_y CONFIG_PACKAGE_apk-openssl
 check_y CONFIG_PACKAGE_luci-app-package-manager
 check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
 check_y CONFIG_LUCI_LANG_zh_Hans
+check_y CONFIG_PACKAGE_luci-app-store
+check_y CONFIG_PACKAGE_luci-i18n-store-zh-cn
 check_off CONFIG_PACKAGE_opkg
 check_off CONFIG_PACKAGE_luci-app-opkg
 check_off CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
-check_off CONFIG_PACKAGE_luci-app-store
 
-# Nokia XG-040G 无 Wi-Fi 硬件。
-# 必须在最后一次 defconfig 后关闭，不能再 defconfig，否则又可能被依赖选回。
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
   echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
   for sym in \
@@ -122,7 +108,7 @@ fi
 
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
-echo "iStore: disabled"
+echo "iStore: enabled"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
 echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
