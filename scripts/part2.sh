@@ -64,20 +64,23 @@ make defconfig
 # =================================================
 # [4/4] 最终 .config 验证
 # =================================================
-echo "==== [4/4] 检查最终 .config ===="
-grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn))=' .config || true
+echo "==== 最终核心软件包检查 ===="
 
-check_y() {
-  grep -q "^$1=y$" .config || { echo "ERROR: $1 未进入最终 .config"; exit 1; }
-  echo "OK: $1=y"
-}
-
-check_off() {
-  if grep -q "^$1=y$\|^$1=m$" .config; then
-    echo "ERROR: $1 仍启用"
-    exit 1
+MISSING=0
+for sym in luci-app-store taskd luci-lib-taskd; do
+  if ! grep -q "^CONFIG_PACKAGE_${sym}=y" .config; then
+    echo "ERROR: ${sym} 未进入最终配置（依赖未满足，已被 defconfig 丢弃）"
+    MISSING=1
   fi
-  echo "OK: $1 disabled"
+done
+
+if ! grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config; then
+  echo "ERROR: CONFIG_LUCI_LANG_zh_Hans 未启用，中文语言包不会被编译"
+  MISSING=1
+fi
+
+[ "$MISSING" = "1" ] && exit 1
+echo ">>> 核心软件包与中文支持检查通过"
 }
 
 check_y CONFIG_USE_APK
