@@ -34,9 +34,6 @@ CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 
 # LuCI 简体中文
 CONFIG_LUCI_LANG_zh_Hans=y
-
-# iStore
-# iStore 本体及运行依赖由 base.config 统一选择；这里不重复定义不存在的翻译包符号。
 EOF
 
 echo "==== [2/4] 准备 files/ ===="
@@ -80,7 +77,8 @@ check_y CONFIG_PACKAGE_luci-app-package-manager
 check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
 check_y CONFIG_LUCI_LANG_zh_Hans
 
-# iStore：base.config 统一给四个 Nokia 型号启用，本阶段只验证最终结果。
+# iStore：base.config 中的配置必须在 make defconfig 后仍然存在。
+# 如果 iStore Feed 没有被正确安装，直接在这里报出原因，而不是让后续编译继续。
 check_y CONFIG_PACKAGE_luci-app-store
 check_y CONFIG_PACKAGE_luci-lib-taskd
 check_y CONFIG_PACKAGE_luci-lib-xterm
