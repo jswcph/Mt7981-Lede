@@ -69,8 +69,10 @@ EOF
 ./scripts/feeds install -d y -p openclash luci-app-openclash
 ./scripts/feeds install -d y -p luci_theme_argon luci-theme-argon luci-app-argon-config
 
-# iStore：必须显式 install，make defconfig 才能解析并保留 CONFIG_PACKAGE_luci-app-store。
-./scripts/feeds install -d y -p istore luci-app-store
+# iStore：把 iStore 自身及其构建/运行依赖全部安装到 package/feeds/istore。
+# 仅安装 luci-app-store 会留下部分依赖未进入顶层 Kconfig，make defconfig 可能将
+# CONFIG_PACKAGE_luci-app-store 从 .config 清掉。
+./scripts/feeds install -d y -p istore luci-app-store luci-lib-taskd luci-lib-xterm taskd
 
 if [ ! -f "package/feeds/luci/luci-app-package-manager/Makefile" ]; then
   echo "ERROR: luci-app-package-manager 未成功安装到 package/feeds/luci"
@@ -80,6 +82,18 @@ if [ ! -f "package/feeds/istore/luci-app-store/Makefile" ]; then
   echo "ERROR: luci-app-store 未成功安装到 package/feeds/istore"
   exit 1
 fi
+if [ ! -f "package/feeds/istore/luci-lib-taskd/Makefile" ]; then
+  echo "ERROR: luci-lib-taskd 未成功安装到 package/feeds/istore"
+  exit 1
+fi
+if [ ! -f "package/feeds/istore/luci-lib-xterm/Makefile" ]; then
+  echo "ERROR: luci-lib-xterm 未成功安装到 package/feeds/istore"
+  exit 1
+fi
+if [ ! -f "package/feeds/istore/taskd/Makefile" ]; then
+  echo "ERROR: taskd 未成功安装到 package/feeds/istore"
+  exit 1
+fi
 
 echo "==== Feeds 检查通过 ===="
 echo "Package Manager: package/feeds/luci/luci-app-package-manager"
@@ -87,6 +101,9 @@ echo "PassWall: package/feeds/passwall/luci-app-passwall"
 echo "OpenClash: package/feeds/openclash/luci-app-openclash"
 echo "Argon: package/feeds/luci_theme_argon"
 echo "iStore: package/feeds/istore/luci-app-store"
+echo "iStore taskd: package/feeds/istore/taskd"
+echo "iStore luci-lib-taskd: package/feeds/istore/luci-lib-taskd"
+echo "iStore luci-lib-xterm: package/feeds/istore/luci-lib-xterm"
 
 echo "==== [4/4] 编译 Mihomo Meta ARM64 ===="
 cd "${SRC_DIR}"
