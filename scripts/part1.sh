@@ -15,7 +15,6 @@ echo "  ImmortalWrt Build Environment"
 echo "==============================================="
 echo "源码：${REPO_URL}"
 echo "分支：${REPO_BRANCH}"
-
 echo "==== [1/4] 安装编译依赖 ===="
 sudo -E apt-get -qq update
 sudo -E apt-get -qq install -y \
@@ -65,7 +64,7 @@ EOF
 
 # 不再使用 luci_theme_argon feed。
 # Argon 官方仓库当前是根目录 Makefile，Argon Config 是独立仓库；
-# 直接放入 package/ 可避免 "Ignoring feed ... - index missing"。
+# 直接放入 package/ 可避免 feed index 问题。
 rm -rf package/luci-theme-argon package/luci-app-argon-config
 
 git clone --depth=1 --single-branch --branch master \
@@ -77,12 +76,25 @@ git clone --depth=1 --single-branch --branch master \
   package/luci-app-argon-config
 
 # 安装本次实际需要的 LuCI / 第三方组件。
-# package-manager 属于 LuCI feed；必须先 install，否则 make defconfig 会把未知的
-# CONFIG_PACKAGE_luci-app-package-manager 从最终 .config 中删除。
 ./scripts/feeds install -d y -p luci luci-app-package-manager luci-i18n-package-manager-zh-cn
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
+
+# package-manager 的实际源码位于 LuCI feed 下；scripts/feeds 在部分情况下会将其
+# 链接到 package/feeds/luci，而不是 package/ 根目录。因此统一建立最终检查路径。
+if [ ! -f "package/luci-app-package-manager/Makefile" ]; then
+  if [ -f "package/feeds/luci/luci-app-package-manager/Makefile" ]; then
+    mkdir -p package/luci-app-package-manager
+    ln -sfn ../feeds/luci/luci-app-package-manager/Makefile package/luci-app-package-manager/Makefile
+  elif [ -f "feeds/luci/applications/luci-app-package-manager/Makefile" ]; then
+    mkdir -p package/luci-app-package-manager
+    ln -sfn ../../feeds/luci/applications/luci-app-package-manager/Makefile package/luci-app-package-manager/Makefile
+  else
+    echo "ERROR: LuCI package-manager 源码不存在"
+    exit 1
+  fi
+fi
 
 for path in \
   "package/luci-app-package-manager/Makefile" \
