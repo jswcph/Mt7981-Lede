@@ -18,7 +18,7 @@ on:
 env:
   TZ: Asia/Shanghai
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: opewrt-24.10
+  REPO_BRANCH: openwrt-24.10
 
 permissions:
   contents: write
