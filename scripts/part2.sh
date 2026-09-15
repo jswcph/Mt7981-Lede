@@ -16,7 +16,7 @@ DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
 
-echo "==== [1/5] 合并 base + device 配置 ===="
+echo "==== [1/4] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
 cat >> .config <<'EOF'
@@ -37,51 +37,9 @@ CONFIG_LUCI_LANG_zh_Hans=y
 EOF
 
 # =================================================
-# iStore preflight
+# [2/4] 准备 files/
 # =================================================
-# 这一阶段只检查“源码和 Kconfig 输入”是否完整，不修改 .config。
-# iStore 官方 luci-app-store 的实际依赖是：
-# curl + tar + libuci-lua + mount-utils + luci-lib-taskd。
-# =================================================
-echo "==== iStore preflight ===="
-ISTORE_APP="package/feeds/istore/luci-app-store/Makefile"
-ISTORE_TASKD="package/feeds/istore/luci-lib-taskd/Makefile"
-ISTORE_XTERM="package/feeds/istore/luci-lib-xterm/Makefile"
-ISTORE_TASK="package/feeds/istore/taskd/Makefile"
-
-for f in "$ISTORE_APP" "$ISTORE_TASKD" "$ISTORE_XTERM" "$ISTORE_TASK"; do
-  if [ ! -f "$f" ]; then
-    echo "ERROR: iStore 源码缺失：$f"
-    exit 1
-  fi
-done
-
-if ! grep -q '^LUCI_DEPENDS:.*+luci-lib-taskd' "$ISTORE_APP"; then
-  echo "ERROR: luci-app-store Makefile 中未发现 luci-lib-taskd 依赖"
-  exit 1
-fi
-
-for dep in \
-  CONFIG_PACKAGE_curl \
-  CONFIG_PACKAGE_tar \
-  CONFIG_PACKAGE_libuci-lua \
-  CONFIG_PACKAGE_mount-utils \
-  CONFIG_PACKAGE_luci-lib-taskd \
-  CONFIG_PACKAGE_luci-lib-xterm \
-  CONFIG_PACKAGE_taskd; do
-  if ! grep -q "^${dep}=y$" .config; then
-    echo "ERROR: iStore 依赖未进入初始 .config：${dep}"
-    exit 1
-  fi
-done
-
-echo "OK: iStore source + dependency preflight"
-grep -E '^(LUCI_DEPENDS|LUCI_EXTRA_DEPENDS|LUCI_PKGARCH):' "$ISTORE_APP" || true
-
-# =================================================
-# [2/5] 准备 files/
-# =================================================
-echo "==== [2/5] 准备 files/ ===="
+echo "==== [2/4] 准备 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
 cp -a "${BASE_DIR}/files/." "${SRC_DIR}/files/"
@@ -98,16 +56,16 @@ cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
 chmod 0755 "${MIHOMO_DST}"
 
 # =================================================
-# [3/5] make defconfig
+# [3/4] make defconfig
 # =================================================
-echo "==== [3/5] make defconfig ===="
+echo "==== [3/4] make defconfig ===="
 make defconfig
 
 # =================================================
-# [4/5] 最终 .config 验证
+# [4/4] 最终 .config 验证
 # =================================================
-echo "==== [4/5] 检查最终 .config ===="
-grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store|luci-lib-taskd|luci-lib-xterm|taskd|curl|tar|libuci-lua|mount-utils))=' .config || true
+echo "==== [4/4] 检查最终 .config ===="
+grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn))=' .config || true
 
 check_y() {
   grep -q "^$1=y$" .config || { echo "ERROR: $1 未进入最终 .config"; exit 1; }
@@ -127,16 +85,6 @@ check_y CONFIG_PACKAGE_apk-openssl
 check_y CONFIG_PACKAGE_luci-app-package-manager
 check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
 check_y CONFIG_LUCI_LANG_zh_Hans
-
-# iStore：主程序和实际依赖必须全部保留。
-check_y CONFIG_PACKAGE_luci-app-store
-check_y CONFIG_PACKAGE_luci-lib-taskd
-check_y CONFIG_PACKAGE_luci-lib-xterm
-check_y CONFIG_PACKAGE_taskd
-check_y CONFIG_PACKAGE_curl
-check_y CONFIG_PACKAGE_tar
-check_y CONFIG_PACKAGE_libuci-lua
-check_y CONFIG_PACKAGE_mount-utils
 
 check_off CONFIG_PACKAGE_opkg
 check_off CONFIG_PACKAGE_luci-app-opkg
@@ -163,12 +111,10 @@ if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; t
 fi
 
 # =================================================
-# [5/5] 输出最终摘要
+# 输出最终摘要
 # =================================================
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
-echo "iStore: enabled (luci-app-store + luci-lib-taskd + luci-lib-xterm + taskd)"
-echo "iStore runtime deps: curl + tar + libuci-lua + mount-utils"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
 echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
