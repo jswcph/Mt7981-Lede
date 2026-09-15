@@ -1,7 +1,8 @@
 #!/bin/bash
 #=================================================
 # part2.sh - Nokia XG-040G ImmortalWrt
-# 生成最终 .config、写入 files，并启用 iStore 离线本地包
+# 生成最终 .config、写入 files
+# iStore 已彻底移除
 #=================================================
 set -e
 
@@ -12,7 +13,6 @@ BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
 DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 [ -f "${DEVICE_CONFIG}" ] || { echo "ERROR: 找不到 ${DEVICE_CONFIG}"; exit 1; }
 [ -d "${SRC_DIR}" ] || { echo "ERROR: 源码目录不存在 ${SRC_DIR}"; exit 1; }
-[ -d "${SRC_DIR}/package/istore-offline" ] || { echo "ERROR: iStore 本地包目录不存在"; exit 1; }
 
 cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
@@ -20,14 +20,16 @@ echo "==== part2: ${DEVICE} ===="
 echo "==== [1/4] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
-# base.config 中的旧 iStore 选项先清掉，再启用 part1 根据指定 .run
-# 转换出来的本地 OpenWrt 包。这样不会使用 istore feed。
+# 明确彻底关闭 iStore/旧 OPKG，避免历史配置残留。
 for sym in \
   CONFIG_PACKAGE_luci-app-store \
   CONFIG_PACKAGE_luci-lib-taskd \
   CONFIG_PACKAGE_luci-lib-xterm \
-  CONFIG_PACKAGE_taskd; do
+  CONFIG_PACKAGE_taskd \
+  CONFIG_PACKAGE_luci-app-opkg \
+  CONFIG_PACKAGE_luci-i18n-opkg-zh-cn; do
   sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
+  echo "# ${sym} is not set" >> .config
 done
 
 cat >> .config <<'EOF'
@@ -40,17 +42,9 @@ CONFIG_PACKAGE_apk-openssl=y
 # LuCI package manager
 CONFIG_PACKAGE_luci-app-package-manager=y
 CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
-# CONFIG_PACKAGE_luci-app-opkg is not set
-# CONFIG_PACKAGE_luci-i18n-opkg-zh-cn is not set
 
 # LuCI 简体中文
 CONFIG_LUCI_LANG_zh_Hans=y
-
-# iStore：来自指定 .run 的四个离线 APK，已转换为本地 OpenWrt 包
-CONFIG_PACKAGE_luci-app-store=y
-CONFIG_PACKAGE_luci-lib-taskd=y
-CONFIG_PACKAGE_luci-lib-xterm=y
-CONFIG_PACKAGE_taskd=y
 EOF
 
 # =================================================
@@ -72,13 +66,6 @@ mkdir -p "$(dirname "${MIHOMO_DST}")"
 cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
 chmod 0755 "${MIHOMO_DST}"
 
-for pkg in luci-app-store luci-lib-taskd luci-lib-xterm taskd; do
-  [ -d "${SRC_DIR}/package/istore-offline/${pkg}/root" ] || {
-    echo "ERROR: iStore 本地包 ${pkg} 未准备完成"
-    exit 1
-  }
-done
-
 # =================================================
 # [3/4] make defconfig
 # =================================================
@@ -88,27 +75,41 @@ make defconfig
 # =================================================
 # [4/4] 最终配置验证
 # =================================================
-# 注意：iStore 本地包的 CONFIG_PACKAGE_* 可能因 ImmortalWrt
-# 的依赖解析被 defconfig 自动移除，因此这里不再把
-# luci-app-store/taskd 等 CONFIG_PACKAGE_* 当作 part2 的硬失败条件。
-# iStore 包是否实际进入最终固件，由后续 package/install 阶段决定。
-echo "==== [4/4] 中文 / APK / Mihomo 最终检查 ===="
+echo "==== [4/4] 最终配置检查 ===="
 MISSING=0
 
-if ! grep -q '^CONFIG_LUCI_LANG_zh_Hans=y' .config; then
-  echo "ERROR: CONFIG_LUCI_LANG_zh_Hans 未启用，中文语言包不会被编译"
-  MISSING=1
-fi
+check_y() {
+  if grep -q "^$1=y$" .config; then
+    echo "OK: $1=y"
+  else
+    echo "ERROR: $1 未进入最终 .config"
+    MISSING=1
+  fi
+}
 
-if ! grep -q '^CONFIG_USE_APK=y' .config; then
-  echo "ERROR: CONFIG_USE_APK 未启用"
-  MISSING=1
-fi
+check_disabled() {
+  if grep -q "^# $1 is not set$" .config; then
+    echo "OK: $1 disabled"
+  else
+    echo "ERROR: $1 没有被关闭"
+    MISSING=1
+  fi
+}
+
+check_y CONFIG_USE_APK
+check_y CONFIG_PACKAGE_apk-openssl
+check_y CONFIG_PACKAGE_luci-app-package-manager
+check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
+check_y CONFIG_LUCI_LANG_zh_Hans
+
+check_disabled CONFIG_PACKAGE_luci-app-store
+check_disabled CONFIG_PACKAGE_luci-lib-taskd
+check_disabled CONFIG_PACKAGE_luci-lib-xterm
+check_disabled CONFIG_PACKAGE_taskd
+check_disabled CONFIG_PACKAGE_luci-app-opkg
+check_disabled CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
 
 [ "$MISSING" = "1" ] && exit 1
-
-echo ">>> iStore：不再因 CONFIG_PACKAGE_* 被 defconfig 移除而中止构建"
-echo ">>> iStore 本地包目录已准备完成，继续进入正式编译阶段"
 
 echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
@@ -130,14 +131,11 @@ if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; t
   done
 fi
 
-# =================================================
-# 输出最终摘要
-# =================================================
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
 echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
-echo "iStore：本地离线包目录已准备"
+echo "iStore：已彻底移除"
 echo "Mihomo: ${MIHOMO_DST}"
 ls -lh "${MIHOMO_DST}"
