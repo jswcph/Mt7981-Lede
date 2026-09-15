@@ -81,7 +81,6 @@ fi
 
 [ "$MISSING" = "1" ] && exit 1
 echo ">>> 核心软件包与中文支持检查通过"
-}
 
 check_y CONFIG_USE_APK
 check_y CONFIG_PACKAGE_apk-openssl
