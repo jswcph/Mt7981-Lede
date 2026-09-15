@@ -55,14 +55,65 @@ git clone --depth=1 --single-branch --branch "${REPO_BRANCH}" \
   "${REPO_URL}" "${SRC_DIR}"
 cd "${SRC_DIR}"
 
-echo "==== [3/5] 应用已验证的 UBI 分区补丁 ===="
-PATCH_DIR="${BASE_DIR}/patches"
+echo "==== [3/5] 调整 UBI 分区布局 ===="
 case "${DEVICE:-}" in
   h3c_magic-nx30-pro)
-    PATCH_FILE="${PATCH_DIR}/991-h3c-magic-nx30-pro-112m.patch"
+    DTS_FILE="target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
+    python3 - "${DTS_FILE}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+
+old_reg = "\\t\\t\\t\\treg = <0x0580000 0x4000000>;"
+new_reg = "\\t\\t\\t\\treg = <0x0580000 0x7000000>;"
+
+if text.count(old_reg) != 1:
+    raise SystemExit(f"ERROR: NX30 Pro 原始 UBI reg 匹配数异常: {text.count(old_reg)}")
+
+text = text.replace(old_reg, new_reg, 1)
+
+# 删除原始 UBI 后面的四个旧 YAFFS/扩展分区，保留 UBI 及其 volumes。
+old_partitions = r'''\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4580000 \{\n\t\t\t\tlabel = "pdt_data";\n\t\t\t\treg = <0x4580000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\t/\* yaffs partition \*/\n\t\t\tpartition@4b80000 \{\n\t\t\t\tlabel = "pdt_data_1";\n\t\t\t\treg = <0x4b80000 0x0600000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5180000 \{\n\t\t\t\tlabel = "exp";\n\t\t\t\treg = <0x5180000 0x0100000>;\n\t\t\t\tread-only;\n\t\t\t\};\n\n\t\t\tpartition@5280000 \{\n\t\t\t\tlabel = "plugin";\n\t\t\t\treg = <0x5280000 0x2580000>;\n\t\t\t\tread-only;\n\t\t\t\};'''
+
+text, removed = re.subn(old_partitions, "", text, count=1)
+if removed != 1:
+    raise SystemExit(f"ERROR: NX30 Pro 旧分区块删除失败，匹配数: {removed}")
+
+if text.count(new_reg) != 1:
+    raise SystemExit(f"ERROR: NX30 Pro 新 UBI reg 验证失败: {text.count(new_reg)}")
+for label in ("pdt_data", "pdt_data_1", 'label = "exp"', 'label = "plugin"'):
+    if label in text:
+        raise SystemExit(f"ERROR: NX30 Pro 旧分区仍存在: {label}")
+
+path.write_text(text)
+PY
+    echo "NX30 Pro UBI: 0x0580000 + 0x7000000"
     ;;
   ruijie_rg-x60)
-    PATCH_FILE="${PATCH_DIR}/990-ruijie-rg-x60-107m.patch"
+    DTS_FILE="target/linux/mediatek/dts/mt7986a-ruijie-rg-x60.dtsi"
+    python3 - "${DTS_FILE}" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text()
+old = "\\t\\t\\t\\treg = <0x680000 0x3f00000>;"
+new = "\\t\\t\\t\\treg = <0x680000 0x6b00000>;"
+
+if text.count(old) != 1:
+    raise SystemExit(f"ERROR: X60 原始 UBI reg 匹配数异常: {text.count(old)}")
+
+text = text.replace(old, new, 1)
+
+if text.count(new) != 1:
+    raise SystemExit(f"ERROR: X60 新 UBI reg 验证失败: {text.count(new)}")
+
+path.write_text(text)
+PY
+    echo "X60 UBI: 0x680000 + 0x6b00000"
     ;;
   *)
     echo "ERROR: 不支持的设备：${DEVICE:-未指定}"
@@ -70,12 +121,18 @@ case "${DEVICE:-}" in
     ;;
 esac
 
-[ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁 ${PATCH_FILE}"; exit 1; }
+echo "UBI 分区布局调整成功"
 
-echo "使用补丁：${PATCH_FILE}"
-git apply --check "${PATCH_FILE}"
-git apply "${PATCH_FILE}"
-echo "UBI 分区补丁应用成功"
+echo "===== UBI 分区验证 ====="
+case "${DEVICE:-}" in
+  h3c_magic-nx30-pro)
+    grep -n 'reg = <0x0580000 0x7000000>;' "${DTS_FILE}"
+    ! grep -qE 'label = "(pdt_data|pdt_data_1|exp|plugin)";' "${DTS_FILE}"
+    ;;
+  ruijie_rg-x60)
+    grep -n 'reg = <0x680000 0x6b00000>;' "${DTS_FILE}"
+    ;;
+esac
 
 echo "==== [4/5] 配置第三方 Feeds ===="
 cat >> feeds.conf.default <<'EOF'
@@ -151,6 +208,6 @@ echo "==============================================="
 echo "ImmortalWrt：${SRC_DIR}"
 echo "设备：${DEVICE:-unknown}"
 echo "源码分支：${REPO_BRANCH}"
-echo "UBI 补丁：${PATCH_FILE}"
+echo "UBI 分区：已直接修改上游 DTS/DTSI"
 echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
