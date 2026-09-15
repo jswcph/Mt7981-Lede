@@ -36,8 +36,7 @@ CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
 CONFIG_LUCI_LANG_zh_Hans=y
 
 # iStore
-CONFIG_PACKAGE_luci-app-store=y
-CONFIG_PACKAGE_luci-i18n-store-zh-cn=y
+# iStore 本体及运行依赖由 base.config 统一选择；这里不重复定义不存在的翻译包符号。
 EOF
 
 echo "==== [2/4] 准备 files/ ===="
@@ -60,7 +59,7 @@ echo "==== [3/4] make defconfig ===="
 make defconfig
 
 echo "==== [4/4] 检查最终 .config ===="
-grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store|luci-i18n-store-zh-cn))=' .config || true
+grep -E '^(CONFIG_USE_APK|CONFIG_LUCI_LANG_zh_Hans|CONFIG_PACKAGE_(apk-openssl|opkg|luci-app-package-manager|luci-i18n-package-manager-zh-cn|luci-app-opkg|luci-i18n-opkg-zh-cn|luci-app-store|luci-lib-taskd|luci-lib-xterm|taskd))=' .config || true
 
 check_y() {
   grep -q "^$1=y$" .config || { echo "ERROR: $1 未进入最终 .config"; exit 1; }
@@ -80,8 +79,13 @@ check_y CONFIG_PACKAGE_apk-openssl
 check_y CONFIG_PACKAGE_luci-app-package-manager
 check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
 check_y CONFIG_LUCI_LANG_zh_Hans
+
+# iStore：base.config 统一给四个 Nokia 型号启用，本阶段只验证最终结果。
 check_y CONFIG_PACKAGE_luci-app-store
-check_y CONFIG_PACKAGE_luci-i18n-store-zh-cn
+check_y CONFIG_PACKAGE_luci-lib-taskd
+check_y CONFIG_PACKAGE_luci-lib-xterm
+check_y CONFIG_PACKAGE_taskd
+
 check_off CONFIG_PACKAGE_opkg
 check_off CONFIG_PACKAGE_luci-app-opkg
 check_off CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
@@ -108,7 +112,7 @@ fi
 
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
-echo "iStore: enabled"
+echo "iStore: enabled (luci-app-store + luci-lib-taskd + luci-lib-xterm + taskd)"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
 echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
 echo "APK: CONFIG_USE_APK=y"
