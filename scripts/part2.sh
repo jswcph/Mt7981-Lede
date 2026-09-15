@@ -72,6 +72,30 @@ chmod 0755 "${MIHOMO_DST}"
 echo "==== [3/4] make defconfig ===="
 make defconfig
 
+# make defconfig 会按依赖关系重写 .config；在 APK 模式下，旧 opkg/iStore
+# 相关符号必须在 defconfig 后再次强制关闭，否则依赖链可能重新带入。
+for sym in \
+  CONFIG_PACKAGE_luci-app-store \
+  CONFIG_PACKAGE_luci-lib-taskd \
+  CONFIG_PACKAGE_luci-lib-xterm \
+  CONFIG_PACKAGE_taskd \
+  CONFIG_PACKAGE_luci-app-opkg \
+  CONFIG_PACKAGE_luci-i18n-opkg-zh-cn; do
+  sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
+  echo "# ${sym} is not set" >> .config
+done
+
+# package-manager 必须在 feed 中可用，且为最终固件明确选中。
+for sym in \
+  CONFIG_USE_APK \
+  CONFIG_PACKAGE_apk-openssl \
+  CONFIG_PACKAGE_luci-app-package-manager \
+  CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn \
+  CONFIG_LUCI_LANG_zh_Hans; do
+  sed -i "/^${sym}=y$/d; /^# ${sym} is not set$/d" .config
+  echo "${sym}=y" >> .config
+done
+
 # =================================================
 # [4/4] 最终配置验证
 # =================================================
