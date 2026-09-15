@@ -54,6 +54,17 @@ jobs:
         with:
           ref: immortalwrt
 
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+
       - name: 释放磁盘并准备工作目录
         uses: easimon/maximize-build-space@master
         with:
