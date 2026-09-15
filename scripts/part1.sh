@@ -7,7 +7,7 @@
 set -e
 
 REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
-REPO_BRANCH="${REPO_BRANCH:-master}"
+REPO_BRANCH="${REPO_BRANCH:-openwrt-24.10}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
 
@@ -89,7 +89,6 @@ EOF
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-# 第三方组件定向安装
 ./scripts/feeds install -d y -p luci luci-app-package-manager
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
@@ -151,6 +150,7 @@ echo "  part1.sh 完成"
 echo "==============================================="
 echo "ImmortalWrt：${SRC_DIR}"
 echo "设备：${DEVICE:-unknown}"
+echo "源码分支：${REPO_BRANCH}"
 echo "UBI 补丁：${PATCH_FILE}"
 echo "Mihomo Meta：${SRC_DIR}/files/etc/openclash/core/clash_meta"
 go version
