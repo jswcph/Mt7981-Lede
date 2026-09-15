@@ -56,7 +56,17 @@ jobs:
         with:
           ref: nokia-xg040g-immortalwrt
 
-
+      # 先清理，再扩容；避免在 /mnt/build 创建后才清理根盘。
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: 清理 APT 缓存与临时文件
         shell: bash
@@ -89,17 +99,6 @@ jobs:
           sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
 
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: false
-
       - name: 准备 ImmortalWrt 与第三方组件
         shell: bash
         run: |
@@ -107,6 +106,8 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
         env:
           SRC_DIR: /mnt/build/work/openwrt
+          REPO_URL: https://github.com/immortalwrt/immortalwrt
+          REPO_BRANCH: master
 
       - name: 写入 Nokia 配置
         shell: bash
@@ -123,6 +124,8 @@ jobs:
           echo "DEVICE=$DEVICE"
           echo "SOURCE=$REPO_URL"
           echo "BRANCH=$REPO_BRANCH"
+          echo "===== Source Commit ====="
+          git rev-parse --short HEAD
           echo '===== Target ====='
           grep -E '^CONFIG_TARGET_(airoha|mediatek)|^CONFIG_TARGET.*DEVICE' .config || true
           echo '===== Package Manager / 中文 / iStore ====='
