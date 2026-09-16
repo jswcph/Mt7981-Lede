@@ -51,7 +51,6 @@ EOF
 # [2/4] 准备 files/
 # =================================================
 echo "==== [2/4] 准备 files/ ===="
-rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
 cp -a "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 
