@@ -1,4 +1,4 @@
-name: Build Immortalwrt mtk798x
+name: Build Immortalwrt-mtk798x
 
 on:
   schedule:
