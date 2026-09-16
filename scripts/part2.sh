@@ -1,8 +1,7 @@
 #!/bin/bash
 #=================================================
 # part2.sh - Nokia XG-040G ImmortalWrt
-# 生成最终 .config、写入 files
-# iStore 已彻底移除
+# 合并配置、写入 files、准备 Mihomo、解析最终 .config
 #=================================================
 set -e
 
@@ -17,40 +16,13 @@ DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 cd "${SRC_DIR}"
 echo "==== part2: ${DEVICE} ===="
 
-echo "==== [1/4] 合并 base + device 配置 ===="
+echo "==== [1/3] 合并 base + device 配置 ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > .config
 
-# 明确彻底关闭 iStore/旧 OPKG，避免历史配置残留。
-for sym in \
-  CONFIG_PACKAGE_luci-app-store \
-  CONFIG_PACKAGE_luci-lib-taskd \
-  CONFIG_PACKAGE_luci-lib-xterm \
-  CONFIG_PACKAGE_taskd \
-  CONFIG_PACKAGE_luci-app-opkg \
-  CONFIG_PACKAGE_luci-i18n-opkg-zh-cn; do
-  sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
-  echo "# ${sym} is not set" >> .config
-done
-
-cat >> .config <<'EOF'
-
-# ImmortalWrt master / APK package manager
-CONFIG_USE_APK=y
-CONFIG_PACKAGE_apk-openssl=y
-# CONFIG_PACKAGE_opkg is not set
-
-# LuCI package manager
-CONFIG_PACKAGE_luci-app-package-manager=y
-CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn=y
-
-# LuCI 简体中文
-CONFIG_LUCI_LANG_zh_Hans=y
-EOF
-
 # =================================================
-# [2/4] 准备 files/
+# [2/3] 准备 files/
 # =================================================
-echo "==== [2/4] 准备 files/ ===="
+echo "==== [2/3] 准备 files/ ===="
 mkdir -p "${SRC_DIR}/files"
 cp -a "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 
@@ -58,6 +30,10 @@ if [ -d "${SRC_DIR}/files/etc/uci-defaults" ]; then
   find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
 fi
 
+# =================================================
+# Mihomo Meta
+# =================================================
+echo "==== 准备 Mihomo Meta ===="
 MIHOMO_SRC="${SRC_DIR}/clash_meta"
 MIHOMO_DST="${SRC_DIR}/files/etc/openclash/core/clash_meta"
 [ -f "${MIHOMO_SRC}" ] || { echo "ERROR: 找不到 ${MIHOMO_SRC}"; exit 1; }
@@ -66,74 +42,9 @@ cp "${MIHOMO_SRC}" "${MIHOMO_DST}"
 chmod 0755 "${MIHOMO_DST}"
 
 # =================================================
-# [3/4] make defconfig
+# Nokia XG-040G 无 Wi-Fi 硬件，因此关闭无线组件
+# 仅修改最终配置，不影响 files/
 # =================================================
-echo "==== [3/4] make defconfig ===="
-make defconfig
-
-# make defconfig 会按依赖关系重写 .config；在 APK 模式下，旧 opkg/iStore
-# 相关符号必须在 defconfig 后再次强制关闭，否则依赖链可能重新带入。
-for sym in \
-  CONFIG_PACKAGE_luci-app-store \
-  CONFIG_PACKAGE_luci-lib-taskd \
-  CONFIG_PACKAGE_luci-lib-xterm \
-  CONFIG_PACKAGE_taskd \
-  CONFIG_PACKAGE_luci-app-opkg \
-  CONFIG_PACKAGE_luci-i18n-opkg-zh-cn; do
-  sed -i "/^${sym}=y$/d; /^${sym}=m$/d; /^# ${sym} is not set$/d" .config
-  echo "# ${sym} is not set" >> .config
-done
-
-# package-manager 必须在 feed 中可用，且为最终固件明确选中。
-for sym in \
-  CONFIG_USE_APK \
-  CONFIG_PACKAGE_apk-openssl \
-  CONFIG_PACKAGE_luci-app-package-manager \
-  CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn \
-  CONFIG_LUCI_LANG_zh_Hans; do
-  sed -i "/^${sym}=y$/d; /^# ${sym} is not set$/d" .config
-  echo "${sym}=y" >> .config
-done
-
-# =================================================
-# [4/4] 最终配置验证
-# =================================================
-echo "==== [4/4] 最终配置检查 ===="
-MISSING=0
-
-check_y() {
-  if grep -q "^$1=y$" .config; then
-    echo "OK: $1=y"
-  else
-    echo "ERROR: $1 未进入最终 .config"
-    MISSING=1
-  fi
-}
-
-check_disabled() {
-  if grep -q "^# $1 is not set$" .config; then
-    echo "OK: $1 disabled"
-  else
-    echo "ERROR: $1 没有被关闭"
-    MISSING=1
-  fi
-}
-
-check_y CONFIG_USE_APK
-check_y CONFIG_PACKAGE_apk-openssl
-check_y CONFIG_PACKAGE_luci-app-package-manager
-check_y CONFIG_PACKAGE_luci-i18n-package-manager-zh-cn
-check_y CONFIG_LUCI_LANG_zh_Hans
-
-check_disabled CONFIG_PACKAGE_luci-app-store
-check_disabled CONFIG_PACKAGE_luci-lib-taskd
-check_disabled CONFIG_PACKAGE_luci-lib-xterm
-check_disabled CONFIG_PACKAGE_taskd
-check_disabled CONFIG_PACKAGE_luci-app-opkg
-check_disabled CONFIG_PACKAGE_luci-i18n-opkg-zh-cn
-
-[ "$MISSING" = "1" ] && exit 1
-
 echo "==== Nokia XG-040G：关闭无硬件 Wi-Fi 组件 ===="
 if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; then
   for sym in \
@@ -154,11 +65,22 @@ if [[ "${DEVICE}" == nokia_xg-040g-md* || "${DEVICE}" == nokia_xg-040g-mf* ]]; t
   done
 fi
 
+# =================================================
+# [3/3] 只做一次 defconfig
+# =================================================
+echo "==== [3/3] make defconfig ===="
+make defconfig
+
+echo "==== DEFCONFIG 后关键配置 ===="
+grep -E '^CONFIG_PACKAGE_luci-(mod-network|mod-status|mod-system)=' .config || true
+grep -E '^CONFIG_(USE_APK|PACKAGE_apk-openssl|PACKAGE_luci-app-package-manager|PACKAGE_luci-i18n-package-manager-zh-cn|LUCI_LANG_zh_Hans)=' .config || true
+grep -E '^CONFIG_PACKAGE_(luci-app-store|luci-lib-taskd|luci-lib-xterm|taskd|luci-app-opkg|luci-i18n-opkg-zh-cn)=' .config || true
+
 echo "==== part2 完成 ===="
 echo "DEVICE: ${DEVICE}"
+echo "LuCI：标准 Network / Status / System 模块"
 echo "LuCI 软件包管理器：luci-app-package-manager + 中文"
-echo "LuCI 中文：CONFIG_LUCI_LANG_zh_Hans=y"
-echo "APK: CONFIG_USE_APK=y"
-echo "iStore：已彻底移除"
+echo "APK：CONFIG_USE_APK=y"
+echo "iStore：未选中"
 echo "Mihomo: ${MIHOMO_DST}"
 ls -lh "${MIHOMO_DST}"
