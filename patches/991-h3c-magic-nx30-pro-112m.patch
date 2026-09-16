@@ -39,10 +39,9 @@
 -				reg = <0x5280000 0x2580000>;
 -				read-only;
 -			};
-+
 --- a/target/linux/mediatek/image/filogic.mk
 +++ b/target/linux/mediatek/image/filogic.mk
-@@ -1,5 +1,21 @@
+@@ -1,1 +1,16 @@
  DTS_DIR := $(DTS_DIR)/mediatek
  
 +define Build/h3c-nx30-pro-ubi-bin
@@ -59,10 +58,7 @@
 +	rm -f $@.fit
 +endef
 +
- define Image/Prepare
- 	# For UBI we want only one extra block
- 	rm -f $(KDIR)/ubi_mark
-@@ -900,6 +916,7 @@
+@@ -900,11 +915,13 @@
    KERNEL_IN_UBI := 1
    UBOOTENV_IN_UBI := 1
    IMAGE_SIZE := 65536k
