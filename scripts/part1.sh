@@ -75,8 +75,18 @@ git clone --depth=1 --single-branch --branch master \
   https://github.com/jerrykuku/luci-app-argon-config.git \
   package/luci-app-argon-config
 
+# 安装本次实际需要的 LuCI 核心模块。
+# LuCI 的 modules 位于 luci feed 中，只有 feeds install 后才会进入
+# package/feeds/luci 并参与最终 Kconfig。仅安装 app 不会自动安装这些独立模块。
+./scripts/feeds install -d y -p luci \
+  luci-base luci-light luci-compat luci-lua-runtime \
+  luci-mod-admin-full luci-mod-network luci-mod-status luci-mod-system \
+  luci-proto-ipv6 luci-proto-ppp luci-lib-uqr
+
 # 安装本次实际需要的 LuCI / 第三方组件。
-./scripts/feeds install -d y -p luci luci-app-package-manager luci-i18n-package-manager-zh-cn
+./scripts/feeds install -d y -p luci \
+  luci-app-package-manager luci-i18n-package-manager-zh-cn \
+  luci-app-firewall luci-i18n-base-zh-cn luci-i18n-firewall-zh-cn
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
@@ -111,6 +121,7 @@ for path in \
 done
 
 echo "==== Feeds / Package 检查 ===="
+echo "LuCI core modules: OK"
 echo "Package Manager: OK"
 echo "Argon Theme: OK"
 echo "Argon Config: OK"
