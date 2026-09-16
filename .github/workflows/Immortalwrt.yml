@@ -19,6 +19,7 @@ env:
   TZ: Asia/Shanghai
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
+  SRC_DIR: /mnt/build/work/openwrt
 
 permissions:
   contents: write
@@ -71,6 +72,12 @@ jobs:
           sudo mkdir -p /mnt/build/work
           sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+          echo "SRC_DIR=/mnt/build/work/openwrt" >> "$GITHUB_ENV"
+          echo '===== 工作目录检查 ====='
+          echo "WORKDIR=/mnt/build/work"
+          echo "SRC_DIR=/mnt/build/work/openwrt"
+          df -h /mnt/build
+          ls -ld /mnt/build /mnt/build/work
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -90,18 +97,33 @@ jobs:
           df -h /
           echo '===== 构建分区 ====='
           df -h /mnt/build
+          echo '===== 工作目录 ====='
+          ls -ld /mnt/build /mnt/build/work
 
       - name: 检查构建源版本
         shell: bash
         run: |
           echo "REPO_URL=$REPO_URL"
           echo "REPO_BRANCH=$REPO_BRANCH"
+          echo "SRC_DIR=$SRC_DIR"
           test "$REPO_BRANCH" = "openwrt-24.10"
 
       - name: 准备 ImmortalWrt 与第三方组件
         shell: bash
         run: |
+          echo "===== 开始准备源码 ====="
+          echo "REPO_URL=$REPO_URL"
+          echo "REPO_BRANCH=$REPO_BRANCH"
+          echo "SRC_DIR=$SRC_DIR"
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+          echo '===== 源码准备完成检查 ====='
+          test -d "$SRC_DIR"
+          test -f "$SRC_DIR/Makefile"
+          cd "$SRC_DIR"
+          echo "SOURCE_DIR=$(pwd)"
+          echo "SOURCE_REMOTE=$(git remote get-url origin)"
+          echo "SOURCE_BRANCH=$(git branch --show-current)"
+          echo "SOURCE_COMMIT=$(git rev-parse --short HEAD)"
 
       - name: 写入设备配置
         shell: bash
