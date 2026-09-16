@@ -101,19 +101,12 @@ jobs:
       - name: 准备 ImmortalWrt 与第三方组件
         shell: bash
         run: |
-          chmod +x "$GITHUB_WORKSPACE/scripts/part1.sh"
           bash "$GITHUB_WORKSPACE/scripts/part1.sh"
-        env:
-          SRC_DIR: /mnt/build/work/openwrt
-          REPO_BRANCH: openwrt-24.10
 
       - name: 写入设备配置
         shell: bash
         run: |
-          chmod +x "$GITHUB_WORKSPACE/scripts/part2.sh"
           bash "$GITHUB_WORKSPACE/scripts/part2.sh"
-        env:
-          SRC_DIR: /mnt/build/work/openwrt
 
       - name: 检查最终配置
         shell: bash
@@ -148,7 +141,6 @@ jobs:
       - name: 整理并上传固件
         shell: bash
         run: |
-          set -e
           OUT="$GITHUB_WORKSPACE/firmware/$DEVICE"
           mkdir -p "$OUT"
           cd "$WORKDIR/openwrt/bin/targets"
@@ -186,7 +178,6 @@ jobs:
         id: release
         shell: bash
         run: |
-          set -e
           mkdir -p release
           find firmware -type f \( \
             -iname '*sysupgrade*' -o -iname '*factory*' -o \
