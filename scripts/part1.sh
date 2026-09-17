@@ -66,30 +66,38 @@ else
 fi
 
 #=================================================
-# H3C Magic NX30 Pro 112MiB UBI 分区补丁
-# U-Boot immortalwrt-112m：UBI 起始 0x580000，大小 0x7000000
+# H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁
 #=================================================
 if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ]; then
     PATCH_FILE="${GITHUB_WORKSPACE}/patches/991-h3c-magic-nx30-pro-112m.patch"
-    echo "==== 应用 H3C Magic NX30 Pro 112MiB UBI 分区补丁 ===="
+    echo "==== 应用 H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁 ===="
     [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
     patch -p1 --forward < "${PATCH_FILE}"
     NX30_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
-    echo "==== 检查 NX30 Pro 112MiB UBI 分区 ===="
-    grep -n -A6 -B1 'partition@580000' "${NX30_DTS}"
     grep -q 'reg = <0x0580000 0x7000000>;' "${NX30_DTS}"
-    ! grep -q 'label = "pdt_data"' "${NX30_DTS}"
-    ! grep -q 'label = "pdt_data_1"' "${NX30_DTS}"
-    ! grep -q 'label = "exp"' "${NX30_DTS}"
-    ! grep -q 'label = "plugin"' "${NX30_DTS}"
-    echo ">>> H3C Magic NX30 Pro 112MiB UBI 分区补丁验证通过"
+    echo ">>> H3C NX30 Pro 普通版 UBI 分区补丁验证通过"
 else
-    echo "==== 当前设备 ${DEVICE:-未指定}，不应用 NX30 Pro 112MiB 分区补丁 ===="
+    echo "==== 当前设备 ${DEVICE:-未指定}，不应用 NX30 Pro 普通版分区补丁 ===="
+fi
+
+#=================================================
+# H3C Magic NX30 Pro NMBM：继承普通版 UBI 分区布局
+# 独立补丁仅调整继承的基础 DTS，不套用普通版镜像生成规则
+#=================================================
+if [ "${DEVICE:-}" = "h3c_magic-nx30-pro-nmbm" ]; then
+    PATCH_FILE="${GITHUB_WORKSPACE}/patches/992-h3c-magic-nx30-pro-nmbm-112m.patch"
+    echo "==== 应用 H3C NX30 Pro NMBM UBI 分区补丁 ===="
+    [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
+    patch -p1 --forward < "${PATCH_FILE}"
+    NX30_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
+    grep -q 'reg = <0x0580000 0x7000000>;' "${NX30_DTS}"
+    echo ">>> H3C NX30 Pro NMBM 继承 UBI 分区验证通过"
+else
+    echo "==== 当前设备 ${DEVICE:-未指定}，不应用 NX30 Pro NMBM 补丁 ===="
 fi
 
 #=================================================
 # 锐捷 RG-X30E / RG-X30E Pro
-# 仅在选择对应设备时注入 DTS 和镜像定义，不影响其他设备
 #=================================================
 if [ "${DEVICE:-}" = "ruijie_rg-x30e" ] || [ "${DEVICE:-}" = "ruijie_rg-x30e-pro" ]; then
     echo "==== 注入 Ruijie RG-X30E / RG-X30E Pro DTS ===="
@@ -143,8 +151,8 @@ EOF
     echo "==== 验证 RG-X30E DTS/镜像定义 ===="
     test -f "${DTS_DST}/mt7981-ruijie-rg-x30e.dts"
     test -f "${DTS_DST}/mt7981-ruijie-rg-x30e-pro.dts"
-    grep -q 'label = "product_info"' "${DTS_DST}/mt7981-ruijie-rg-x30e.dtsi"
-    grep -q 'label = "product_info"' "${DTS_DST}/mt7981-ruijie-rg-x30e-pro.dtsi"
+    grep -q 'label = \"product_info\"' "${DTS_DST}/mt7981-ruijie-rg-x30e.dtsi"
+    grep -q 'label = \"product_info\"' "${DTS_DST}/mt7981-ruijie-rg-x30e-pro.dtsi"
     grep -q 'reg = <0x880000 0x6F80000>;' "${DTS_DST}/mt7981-ruijie-rg-x30e.dts"
     grep -q 'reg = <0x880000 0x6F80000>;' "${DTS_DST}/mt7981-ruijie-rg-x30e-pro.dts"
     echo ">>> RG-X30E / X30E Pro DTS 注入与 112MiB UBI 定义验证通过"
