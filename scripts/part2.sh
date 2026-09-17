@@ -45,4 +45,13 @@ fi
 echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
+
+#=================================================
+# 可删除模块：精简配置最终状态核验（只读）
+# 如不需要核验，删除下面这段调用，并删除 scripts/check-trim-config.sh。
+# 本模块不强制关闭选项，避免破坏设备/驱动依赖。
+#=================================================
+echo "==== 检查内核精简项最终状态（只读）===="
+bash "${BASE_DIR}/scripts/check-trim-config.sh" "${SRC_DIR}/.config"
+
 echo ">>> part2.sh 执行完毕，当前编译设备：${DEVICE}"
