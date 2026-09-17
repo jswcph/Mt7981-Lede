@@ -115,14 +115,17 @@ jobs:
       - name: 下载编译所需依赖包
         run: |
           cd "$WORKDIR/openwrt"
-          make download -j4
+          JOBS="$(nproc)"
+          echo "使用 $JOBS 线程下载依赖"
+          make download -j"$JOBS"
           find dl -type f -size -1024c -delete
 
       - name: 开始编译固件
         run: |
           cd "$WORKDIR/openwrt"
-          echo "使用 4 线程编译，设备：$DEVICE"
-          make -j4 V=sc
+          JOBS="$(nproc)"
+          echo "使用 $JOBS 线程编译，设备：$DEVICE"
+          make -j"$JOBS" V=sc
         timeout-minutes: 300
 
       - name: 整理固件产物
