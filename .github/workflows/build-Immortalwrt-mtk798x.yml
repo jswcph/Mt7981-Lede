@@ -119,7 +119,7 @@ jobs:
         run: |
           cd "$WORKDIR/openwrt"
           make download -j4
-          find dl -size -1024c -exec rm -f {} \\\;
+          find dl -size -1024c -exec rm -f {} \;
 
       - name: 开始编译固件
         run: |
