@@ -72,7 +72,7 @@ jobs:
       - name: 检出本仓库
         uses: actions/checkout@v4
 
-      - name: 扩容并清理构建磁盘
+      - name: 释放磁盘空间
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 2048
@@ -83,11 +83,22 @@ jobs:
           remove-codeql: 'true'
           build-mount-path: /mnt/build
 
-      - name: 设置工作目录
+      - name: 调整工作目录到扩容分区
         run: |
           sudo mkdir -p /mnt/build/work
           sudo chown "$USER:$USER" /mnt/build/work
           echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
 
       - name: part1 - 准备编译环境与源码
         run: |
