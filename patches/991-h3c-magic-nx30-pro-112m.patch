@@ -41,7 +41,7 @@
 -			};
 --- a/target/linux/mediatek/image/filogic.mk
 +++ b/target/linux/mediatek/image/filogic.mk
-@@ -1,1 +1,16 @@
+@@ -1,2 +1,16 @@
  DTS_DIR := $(DTS_DIR)/mediatek
  
 +define Build/h3c-nx30-pro-ubi-bin
