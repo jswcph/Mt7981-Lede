@@ -58,12 +58,12 @@
 +	rm -f $@.fit
 +endef
 +
-@@ -900,11 +915,13 @@
+@@ -900,15 +914,18 @@
    KERNEL_IN_UBI := 1
    UBOOTENV_IN_UBI := 1
    IMAGE_SIZE := 65536k
--  IMAGES := sysupgrade.itb
-+  IMAGES := sysupgrade.itb sysupgrade.bin
+ -  IMAGES := sysupgrade.itb
+ +  IMAGES := sysupgrade.itb sysupgrade.bin
    KERNEL_INITRAMFS_SUFFIX := -recovery.itb
    KERNEL := kernel-bin | gzip
    KERNEL_INITRAMFS := kernel-bin | lzma | \
