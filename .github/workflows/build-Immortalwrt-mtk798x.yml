@@ -14,6 +14,7 @@ on:
         options:
           - all
           - h3c_magic-nx30-pro
+          - h3c_magic-nx30-pro-nmbm
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
           - cmcc_rax3000m-nand
@@ -52,7 +53,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60","ruijie_rg-x60-pro","ruijie_rg-x30e","ruijie_rg-x30e-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["h3c_magic-nx30-pro","h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60","ruijie_rg-x60-pro","ruijie_rg-x30e","ruijie_rg-x30e-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
@@ -118,7 +119,7 @@ jobs:
         run: |
           cd "$WORKDIR/openwrt"
           make download -j4
-          find dl -size -1024c -exec rm -f {} \;
+          find dl -size -1024c -exec rm -f {} \\\;
 
       - name: 开始编译固件
         run: |
@@ -137,8 +138,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
           cd "$WORKDIR/openwrt/bin/targets"
-          find . -type f \( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" \) \
-            -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
+          find . -type f \\\( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" \\\) \\\n            -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \\\;
           cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed" || true
 
       - name: 上传固件为 Artifact
@@ -170,8 +170,7 @@ jobs:
         id: meta
         run: |
           mkdir -p release
-          find firmware -type f \( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" -o -iname "*.seed" \) \
-            -exec cp {} release/ \;
+          find firmware -type f \\\( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" -o -iname "*.seed" \\\) \\\n            -exec cp {} release/ \\\;
           echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: 发布到 Release 页面
