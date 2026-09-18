@@ -1,4 +1,4 @@
-name: Build Immortalwrt-mtk798x
+name: Build Immortalwrt-Ruijie
 
 on:
   schedule:
@@ -13,29 +13,17 @@ on:
         type: choice
         options:
           - all
-          - h3c_magic-nx30-pro
-          - h3c_magic-nx30-pro-nmbm
-          - qihoo_360t7
-          - xiaomi_mi-router-ax3000t
-          - cmcc_rax3000m-nand
-          - abt_asr3000
-          - ruijie_rg-x60
-          - ruijie_rg-x60-pro
           - ruijie_rg-x30e
           - ruijie_rg-x30e-pro
-          - nokia_ea0326gmp
-          - jcg_q30-pro
-          - cmcc_xr30-nand
-          - xiaomi_redmi-router-ax6000
 
       repo_url:
-        description: '源码仓库地址（ImmortalWrt）'
+        description: '源码仓库地址（Ruijie-ImmortalWrt）'
         required: false
-        default: 'https://github.com/immortalwrt/immortalwrt'
+        default: 'https://github.com/RuijieNetworksCommunity/immortalwrt-mt798x-24.10-6.6'
       repo_branch:
         description: '源码分支'
         required: false
-        default: 'openwrt-24.10'
+        default: 'openwrt-24.10-6.6'
 
 env:
   TZ: Asia/Shanghai
@@ -53,7 +41,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60","ruijie_rg-x60-pro","ruijie_rg-x30e","ruijie_rg-x30e-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["ruijie_rg-x30e","ruijie_rg-x30e-pro"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
@@ -65,8 +53,8 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
-      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
-      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
+      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/RuijieNetworksCommunity/immortalwrt-mt798x-24.10-6.6' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10-6.6' }}
       DEVICE: ${{ matrix.device }}
     steps:
       - name: 检出本仓库
