@@ -118,16 +118,17 @@ jobs:
 
       - name: 下载编译所需依赖包
         run: |
+          set -euo pipefail
           cd "$WORKDIR/openwrt"
           make download -j4
-          find dl -size -1024c -exec rm -f {} \\\;
+          # 删除下载目录中小于 1KB 的文件；不使用 -exec，避免转义问题
+          find dl -type f -size -1024c -print -delete
 
       - name: 开始编译固件
         run: |
           cd "$WORKDIR/openwrt"
           echo "使用 2 线程编译，设备：$DEVICE"
-          make -j2 V=sc
-          if [ $? -ne 0 ]; then
+          if ! make -j2 V=sc; then
             echo "2线程编译失败，降级为单线程..."
             make -j1 V=sc
           fi
@@ -135,15 +136,15 @@ jobs:
 
       - name: 整理固件产物
         run: |
-          set -e
+          set -euo pipefail
           SRC="$WORKDIR/openwrt/bin/targets"
           OUT="$GITHUB_WORKSPACE/firmware/${DEVICE}"
           DATE=$(date +'%y%m%d')
           mkdir -p "$OUT"
-          find "$SRC" -type f \\
-            \\( -iname '*sysupgrade*' \\
-            -o -iname '*factory*' \\
-            -o -iname '*.img.gz' \\) \\
+          test -d "$SRC"
+
+          find "$SRC" -type f \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img.gz' \) \
             -print0 |
           while IFS= read -r -d '' file; do
             BASE=$(basename "$file")
@@ -165,7 +166,10 @@ jobs:
             cp "$file" "$OUT/$NEW_NAME"
             echo "已整理：$NEW_NAME"
           done
+
           cp "$WORKDIR/openwrt/.config" "$OUT/Lede-${DEVICE}-config-${DATE}.seed" || true
+          echo "===== 已收集固件 ====="
+          find "$OUT" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
 
       - name: 上传固件为 Artifact
         uses: actions/upload-artifact@v4
@@ -195,9 +199,19 @@ jobs:
       - name: 整理发布文件
         id: meta
         run: |
+          set -euo pipefail
           mkdir -p release
-          find firmware -type f \\( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" -o -iname "*.seed" \\) \\
-            -exec cp {} release/ \\\;
+
+          # 使用 -print0 + read，避免 find -exec 的反斜杠转义问题
+          find firmware -type f \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img.gz' -o -iname '*.seed' \) \
+            -print0 |
+          while IFS= read -r -d '' file; do
+            cp -f "$file" release/
+          done
+
+          echo "===== Release 文件列表 ====="
+          find release -maxdepth 1 -type f -printf '%f (%s bytes)\n'
           echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: 发布到 Release 页面
