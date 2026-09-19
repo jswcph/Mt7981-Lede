@@ -3,6 +3,7 @@
 # part2.sh
 # 功能：合并 通用配置 + 设备配置 生成 .config
 #       写入默认系统设置覆盖目录 files/
+#       可选启用 USB 存储/NAS/串口/网卡模块
 #       执行 defconfig 解析依赖
 #=================================================
 set -e
@@ -26,6 +27,29 @@ fi
 echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
 
+if [ "${ENABLE_USB_MODULES:-0}" = "1" ]; then
+  echo "==== USB 专用构建：启用 USB 存储/NAS/串口/网卡模块 ===="
+  cat >> "${SRC_DIR}/.config" <<'USB_CONFIG'
+CONFIG_USB_SUPPORT=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-storage-extras=y
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-fs-exfat=y
+CONFIG_PACKAGE_kmod-nls-cp437=y
+CONFIG_PACKAGE_kmod-nls-iso8859-1=y
+CONFIG_PACKAGE_kmod-nls-utf8=y
+CONFIG_PACKAGE_block-mount=y
+CONFIG_PACKAGE_kmod-usb-serial=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+CONFIG_PACKAGE_kmod-usb-net=y
+CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+USB_CONFIG
+fi
+
 echo "==== 写入默认系统设置覆盖目录 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
@@ -45,6 +69,36 @@ fi
 echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
+
+if [ "${ENABLE_USB_MODULES:-0}" = "1" ]; then
+  echo "==== USB 配置解析结果（defconfig 后）===="
+  USB_SYMBOLS=(
+    CONFIG_USB_SUPPORT
+    CONFIG_PACKAGE_kmod-usb-storage
+    CONFIG_PACKAGE_kmod-usb-storage-extras
+    CONFIG_PACKAGE_kmod-usb-storage-uas
+    CONFIG_PACKAGE_kmod-fs-ext4
+    CONFIG_PACKAGE_kmod-fs-vfat
+    CONFIG_PACKAGE_kmod-fs-exfat
+    CONFIG_PACKAGE_kmod-nls-cp437
+    CONFIG_PACKAGE_kmod-nls-iso8859-1
+    CONFIG_PACKAGE_kmod-nls-utf8
+    CONFIG_PACKAGE_block-mount
+    CONFIG_PACKAGE_kmod-usb-serial
+    CONFIG_PACKAGE_kmod-usb-serial-option
+    CONFIG_PACKAGE_kmod-usb-serial-wwan
+    CONFIG_PACKAGE_kmod-usb-net
+    CONFIG_PACKAGE_kmod-usb-net-cdc-ether
+    CONFIG_PACKAGE_kmod-usb-net-rndis
+  )
+  for symbol in "${USB_SYMBOLS[@]}"; do
+    if grep -qx "${symbol}=y" .config; then
+      echo "[USB OK] ${symbol}=y"
+    else
+      echo "[USB WARN] ${symbol} 未解析为 y（可能上游无此选项或依赖不满足）"
+    fi
+  done
+fi
 
 #=================================================
 # 可删除模块：精简配置最终状态核验（只读）
