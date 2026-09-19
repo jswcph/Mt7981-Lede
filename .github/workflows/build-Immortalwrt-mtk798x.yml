@@ -14,12 +14,15 @@ on:
         options:
           - all
           - h3c_magic-nx30-pro
-          - h3c_magic-nx30-pro-nmbm
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
           - cmcc_rax3000m-nand
+          - cmcc_rax3000me-nand
+          - cmcc_rax3000m-emmc
+          - netcore_n60
+          - netcore_n60-pro
+          - xiaomi_mi-router-wr30u
           - abt_asr3000
-          - ruijie_rg-x60
           - ruijie_rg-x60-pro
           - nokia_ea0326gmp
           - jcg_q30-pro
@@ -51,7 +54,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","abt_asr3000","ruijie_rg-x60","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
@@ -133,17 +136,17 @@ jobs:
           TARGET_DIR="$WORKDIR/openwrt/bin/targets"
           mkdir -p "$OUT_DIR"
           test -d "$TARGET_DIR"
-          find "$TARGET_DIR" -type f \( \
-            -iname '*.bin' -o \
-            -iname '*.itb' -o \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*.img' -o \
-            -iname '*.img.gz' \
+          find "$TARGET_DIR" -type f \( \\
+            -iname '*.bin' -o \\
+            -iname '*.itb' -o \\
+            -iname '*sysupgrade*' -o \\
+            -iname '*factory*' -o \\
+            -iname '*.img' -o \\
+            -iname '*.img.gz' \\
           \) -exec cp -t "$OUT_DIR" {} +
           cp "$WORKDIR/openwrt/.config" "$OUT_DIR/config-${DEVICE}.seed"
           echo "已收集的产物："
-          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\\n'
           if ! find "$OUT_DIR" -maxdepth 1 -type f ! -name '*.seed' -print -quit | grep -q .; then
             echo "ERROR: 未找到固件文件（BIN/ITB/IMG/sysupgrade/factory）"
             exit 1
@@ -179,17 +182,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find firmware -type f \( \
-            -iname '*.bin' -o \
-            -iname '*.itb' -o \
-            -iname '*sysupgrade*' -o \
-            -iname '*factory*' -o \
-            -iname '*.img' -o \
-            -iname '*.img.gz' -o \
-            -iname '*.seed' \
+          find firmware -type f \( \\
+            -iname '*.bin' -o \\
+            -iname '*.itb' -o \\
+            -iname '*sysupgrade*' -o \\
+            -iname '*factory*' -o \\
+            -iname '*.img' -o \\
+            -iname '*.img.gz' -o \\
+            -iname '*.seed' \\
           \) -exec cp -t release {} +
           echo "Release 待发布文件："
-          find release -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+          find release -maxdepth 1 -type f -printf '%f (%s bytes)\\n'
           if [ -z "$(find release -maxdepth 1 -type f -print -quit)" ]; then
             echo "ERROR: Release 目录没有可发布文件"
             exit 1
