@@ -1,0 +1,39 @@
+
+diff --git a/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts b/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts
+--- a/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts
++++ b/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts
+@@ -150,35 +150,8 @@
+ 			partition@580000 {
+ 				label = "ubi";
+-				reg = <0x0580000 0x4000000>;
++				reg = <0x0580000 0x7000000>;
+ 			};
+ 
+-			/* yaffs partition */
+-			partition@4580000 {
+-				label = "pdt_data";
+-				reg = <0x4580000 0x0600000>;
+-				read-only;
+-			};
+-
+-			/* yaffs partition */
+-			partition@4b80000 {
+-				label = "pdt_data_1";
+-				reg = <0x4b80000 0x0600000>;
+-				read-only;
+-			};
+-
+-			partition@5180000 {
+-				label = "exp";
+-				reg = <0x5180000 0x0100000>;
+-				read-only;
+-			};
+-
+-			partition@5280000 {
+-				label = "plugin";
+-				reg = <0x5280000 0x2580000>;
+-				read-only;
+-			};
+ 		};
+ 	};
+ };
