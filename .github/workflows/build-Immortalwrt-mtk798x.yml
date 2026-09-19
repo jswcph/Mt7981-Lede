@@ -13,7 +13,7 @@ on:
         type: choice
         options:
           - all
-          - h3c_magic-nx30-pro
+          - h3c_magic-nx30-pro-nmbm
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
           - cmcc_rax3000m-nand
@@ -48,18 +48,29 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      usb_matrix: ${{ steps.set-matrix.outputs.usb_matrix }}
     steps:
       - id: set-matrix
+        shell: bash
         run: |
+          set -euo pipefail
           INPUT_DEVICE="${{ github.event.inputs.device }}"
+          NORMAL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","netcore_n60","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","xiaomi_redmi-router-ax6000"]'
+          USB='["cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","cmcc_xr30-nand","netcore_n60-pro"]'
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo "matrix={\"device\":$NORMAL}" >> "$GITHUB_OUTPUT"
+            echo "usb_matrix={\"device\":$USB}" >> "$GITHUB_OUTPUT"
+          elif [[ "$INPUT_DEVICE" =~ ^(cmcc_rax3000m-nand|cmcc_rax3000me-nand|cmcc_rax3000m-emmc|cmcc_xr30-nand|netcore_n60-pro)$ ]]; then
+            echo 'matrix={"device":[]}' >> "$GITHUB_OUTPUT"
+            echo "usb_matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
+            echo 'usb_matrix={"device":[]}' >> "$GITHUB_OUTPUT"
           fi
 
   build:
     needs: prepare
+    if: ${{ needs.prepare.outputs.matrix != '{"device":[]}' }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
@@ -127,17 +138,10 @@ jobs:
           TARGET_DIR="$WORKDIR/openwrt/bin/targets"
           mkdir -p "$OUT_DIR"
           test -d "$TARGET_DIR"
-          find "$TARGET_DIR" -type f \( \\
-            -iname '*.bin' -o \\
-            -iname '*.itb' -o \\
-            -iname '*sysupgrade*' -o \\
-            -iname '*factory*' -o \\
-            -iname '*.img' -o \\
-            -iname '*.img.gz' \\
-          \) -exec cp -t "$OUT_DIR" {} +
+          find "$TARGET_DIR" -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' \) -exec cp -t "$OUT_DIR" {} +
           cp "$WORKDIR/openwrt/.config" "$OUT_DIR/config-${DEVICE}.seed"
           echo "已收集的产物："
-          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\\n'
+          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
           if ! find "$OUT_DIR" -maxdepth 1 -type f ! -name '*.seed' -print -quit | grep -q .; then
             echo "ERROR: 未找到固件文件（BIN/ITB/IMG/sysupgrade/factory）"
             exit 1
@@ -151,16 +155,12 @@ jobs:
           if-no-files-found: error
 
   build-usb:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.usb_matrix != '{"device":[]}' }}
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
-      matrix:
-        device:
-          - netcore_n60-pro
-          - cmcc_rax3000me-nand
-          - cmcc_rax3000m-nand
-          - cmcc_rax3000m-emmc
-          - cmcc_xr30-nand
+      matrix: ${{ fromJson(needs.prepare.outputs.usb_matrix) }}
     env:
       REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
       REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
@@ -229,17 +229,10 @@ jobs:
           while IFS= read -r -d '' file; do
             base="$(basename "$file")"
             cp "$file" "$OUT_DIR/USB-${base}"
-          done < <(find "$TARGET_DIR" -type f \( \\
-            -iname '*.bin' -o \\
-            -iname '*.itb' -o \\
-            -iname '*sysupgrade*' -o \\
-            -iname '*factory*' -o \\
-            -iname '*.img' -o \\
-            -iname '*.img.gz' \\
-          \) -print0)
+          done < <(find "$TARGET_DIR" -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' \) -print0)
           cp "$WORKDIR/openwrt/.config" "$OUT_DIR/config-${DEVICE}-USB.seed"
           echo "USB 固件产物："
-          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\\n'
+          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
           if ! find "$OUT_DIR" -maxdepth 1 -type f ! -name '*.seed' -print -quit | grep -q .; then
             echo "ERROR: 未找到 USB 固件文件"
             exit 1
@@ -254,6 +247,7 @@ jobs:
 
   release:
     needs: [build, build-usb]
+    if: always() && (needs.build.result == 'success' || needs.build-usb.result == 'success')
     runs-on: ubuntu-22.04
     steps:
       - name: 检出本仓库
@@ -271,17 +265,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release
-          find firmware -type f \( \\
-            -iname '*.bin' -o \\
-            -iname '*.itb' -o \\
-            -iname '*sysupgrade*' -o \\
-            -iname '*factory*' -o \\
-            -iname '*.img' -o \\
-            -iname '*.img.gz' -o \\
-            -iname '*.seed' \\
-          \) -exec cp -t release {} +
+          find firmware -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' -o -iname '*.seed' \) -exec cp -t release {} +
           echo "Release 待发布文件："
-          find release -maxdepth 1 -type f -printf '%f (%s bytes)\\n'
+          find release -maxdepth 1 -type f -printf '%f (%s bytes)\n'
           if [ -z "$(find release -maxdepth 1 -type f -print -quit)" ]; then
             echo "ERROR: Release 目录没有可发布文件"
             exit 1
