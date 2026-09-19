@@ -130,11 +130,52 @@ jobs:
 
       - name: 整理固件产物
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/firmware/${DEVICE}"
-          cd "$WORKDIR/openwrt/bin/targets"
-          find . -type f \( -iname "*sysupgrade*" -o -iname "*factory*" -o -iname "*.img.gz" \) \
-            -exec cp {} "$GITHUB_WORKSPACE/firmware/${DEVICE}/" \;
-          cp "$WORKDIR/openwrt/.config" "$GITHUB_WORKSPACE/firmware/${DEVICE}/config-${DEVICE}.seed" || true
+          set -e
+
+          SRC="$WORKDIR/openwrt/bin/targets"
+          OUT="$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          DATE=$(date +'%y%m%d')
+
+          mkdir -p "$OUT"
+
+          find "$SRC" -type f \
+            \( -iname '*sysupgrade*' \
+            -o -iname '*factory*' \
+            -o -iname '*.img.gz' \) \
+            -print0 |
+          while IFS= read -r -d '' file; do
+
+            BASE=$(basename "$file")
+
+            # 去掉原始固件名中的设备前缀
+            CLEAN_NAME="$BASE"
+
+            case "$BASE" in
+              openwrt-*)
+                CLEAN_NAME="${BASE#openwrt-}"
+                ;;
+            esac
+
+            # 插入固定前缀、设备名和日期
+            case "$CLEAN_NAME" in
+              *.img.gz)
+                NAME="${CLEAN_NAME%.img.gz}"
+                NEW_NAME="Lede-${DEVICE}-${NAME}-${DATE}.img.gz"
+                ;;
+              *)
+                NAME="${CLEAN_NAME%.*}"
+                EXT="${CLEAN_NAME##*.}"
+                NEW_NAME="Lede-${DEVICE}-${NAME}-${DATE}.${EXT}"
+                ;;
+            esac
+
+            cp "$file" "$OUT/$NEW_NAME"
+            echo "已整理：$NEW_NAME"
+
+          done
+
+          cp "$WORKDIR/openwrt/.config" \
+            "$OUT/Lede-${DEVICE}-config-${DATE}.seed" || true
 
       - name: 上传固件为 Artifact
         uses: actions/upload-artifact@v4
