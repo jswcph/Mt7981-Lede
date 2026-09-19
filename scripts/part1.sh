@@ -190,7 +190,7 @@ fi
 echo "==== 检查 H3C Magic NX30 Pro 112M 补丁 ===="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NX30_PRO_PATCH="${SCRIPT_DIR}/patches/991-h3c-magic-nx30-pro-112m.patch"
+NX30_PRO_PATCH="${REPO_ROOT}/patches/991-h3c-magic-nx30-pro-112m.patch"
 
 if [ -f "${NX30_PRO_PATCH}" ]; then
   echo ">>> 找到 NX30 Pro 补丁"
