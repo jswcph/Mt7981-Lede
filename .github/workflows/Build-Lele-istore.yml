@@ -1,0 +1,126 @@
+name: Build-Lele-istore
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "设备配置名（不含 .config）"
+        required: true
+        type: choice
+        options:
+          - abt_asr3000
+          - cmcc_rax3000m-emmc
+          - cmcc_rax3000m-nand
+          - cmcc_rax3000me-nand
+          - cmcc_xr30-nand
+          - h3c_magic-nx30-pro
+          - jcg_q30-pro
+          - netcore_n60
+          - netcore_n60-pro
+          - nokia_ea0326gmp
+          - qihoo_360t7
+          - ruijie_rg-x60-pro
+          - xiaomi_mi-router-ax3000t
+          - xiaomi_mi-router-wr30u
+          - xiaomi_redmi-router-ax6000
+      repo_url:
+        description: "OpenWrt 源码仓库"
+        required: true
+        default: "https://github.com/immortalwrt/immortalwrt"
+        type: string
+      repo_branch:
+        description: "OpenWrt 源码分支"
+        required: true
+        default: "master"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Shanghai
+  UPLOAD_FIRMWARE: true
+  UPLOAD_RELEASE: true
+
+jobs:
+  build:
+    name: Build ${{ inputs.device }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: Checkout build scripts and configs
+        uses: actions/checkout@v4
+        with:
+          ref: lede-mt7981-istore
+
+      - name: Validate device config
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "config/devices/${{ inputs.device }}.config" || {
+            echo "找不到设备配置：config/devices/${{ inputs.device }}.config"
+            exit 1
+          }
+
+      - name: Run part1 - prepare source, feeds and Mihomo
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+          REPO_BRANCH: ${{ inputs.repo_branch }}
+          SRC_DIR: ${{ github.workspace }}/openwrt
+        run: bash scripts/part1.sh
+
+      - name: Run part2 - configure firmware
+        env:
+          DEVICE: ${{ inputs.device }}
+          SRC_DIR: ${{ github.workspace }}/openwrt
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: bash scripts/part2.sh
+
+      - name: Compile firmware
+        working-directory: openwrt
+        run: make -j"$(nproc)" V=sc
+
+      - name: Collect firmware files
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p firmware
+          find openwrt/bin/targets -type f \( \
+            -name '*sysupgrade*' -o \
+            -name '*factory*' -o \
+            -name '*.img.gz' -o \
+            -name '*.bin' -o \
+            -name '*.itb' \
+          \) -exec cp -v {} firmware/ \;
+          if ! find firmware -maxdepth 1 -type f | grep -q .; then
+            echo '错误：没有找到可发布的固件文件'
+            exit 1
+          fi
+          echo '收集到的固件：'
+          ls -lh firmware
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LEDE-istore-${{ inputs.device }}-${{ github.run_number }}
+          path: firmware/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: ${{ env.UPLOAD_RELEASE == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: LEDE-istore-${{ inputs.device }}-${{ github.run_number }}
+          name: LEDE-iStore ${{ inputs.device }} #${{ github.run_number }}
+          body: |
+            自动构建的 LEDE-iStore 固件。
+            - 设备：${{ inputs.device }}
+            - 源码：${{ inputs.repo_url }}
+            - 分支：${{ inputs.repo_branch }}
+            - 工作流运行：${{ github.run_number }}
+          files: firmware/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
