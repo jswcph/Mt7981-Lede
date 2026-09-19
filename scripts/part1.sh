@@ -183,7 +183,30 @@ else
   echo "==== 未找到 Ruijie RG-X60 Pro 的 DTS，跳过补丁 ===="
 fi
 
+#=================================================
+# H3C Magic NX30 Pro 112M 分区扩容补丁
+#=================================================
 
+echo "==== 检查 H3C Magic NX30 Pro 112M 补丁 ===="
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NX30_PRO_PATCH="${SCRIPT_DIR}/patches/991-h3c-magic-nx30-pro-112m.patch"
+
+if [ -f "${NX30_PRO_PATCH}" ]; then
+  echo ">>> 找到 NX30 Pro 补丁"
+
+  if git apply --check "${NX30_PRO_PATCH}"; then
+    git apply "${NX30_PRO_PATCH}"
+    echo ">>> NX30 Pro 112M 分区补丁应用成功"
+  else
+    echo "ERROR: NX30 Pro 补丁无法应用"
+    echo "请检查补丁是否已应用，或与当前源码是否匹配"
+    exit 1
+  fi
+else
+  echo "ERROR: 找不到补丁文件：${NX30_PRO_PATCH}"
+  exit 1
+fi
 #=================================================
 # [3/5] 写入自定义 Feeds
 #=================================================
