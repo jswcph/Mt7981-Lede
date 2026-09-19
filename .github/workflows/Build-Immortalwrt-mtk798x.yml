@@ -1,0 +1,282 @@
+name: Build Immortalwrt-mtk798x
+
+on:
+  schedule:
+    # 每周日 22:00 北京时间 = UTC 周日 14:00
+    - cron: '0 14 * * 0'
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '选择要编译的设备（all = 全部机型）'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - h3c_magic-nx30-pro-nmbm
+          - qihoo_360t7
+          - xiaomi_mi-router-ax3000t
+          - cmcc_rax3000m-nand
+          - cmcc_rax3000me-nand
+          - cmcc_rax3000m-emmc
+          - netcore_n60
+          - netcore_n60-pro
+          - xiaomi_mi-router-wr30u
+          - abt_asr3000
+          - ruijie_rg-x60-pro
+          - nokia_ea0326gmp
+          - jcg_q30-pro
+          - cmcc_xr30-nand
+          - xiaomi_redmi-router-ax6000
+      repo_url:
+        description: '源码仓库地址（ImmortalWrt）'
+        required: false
+        default: 'https://github.com/immortalwrt/immortalwrt'
+      repo_branch:
+        description: '源码分支'
+        required: false
+        default: 'openwrt-24.10'
+
+env:
+  TZ: Asia/Shanghai
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      usb_matrix: ${{ steps.set-matrix.outputs.usb_matrix }}
+    steps:
+      - id: set-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_DEVICE="${{ github.event.inputs.device }}"
+          NORMAL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","netcore_n60","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","xiaomi_redmi-router-ax6000"]'
+          USB='["cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","cmcc_xr30-nand","netcore_n60-pro"]'
+          if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
+            echo "matrix={\"device\":$NORMAL}" >> "$GITHUB_OUTPUT"
+            echo "usb_matrix={\"device\":$USB}" >> "$GITHUB_OUTPUT"
+          elif [[ "$INPUT_DEVICE" =~ ^(cmcc_rax3000m-nand|cmcc_rax3000me-nand|cmcc_rax3000m-emmc|cmcc_xr30-nand|netcore_n60-pro)$ ]]; then
+            echo 'matrix={"device":[]}' >> "$GITHUB_OUTPUT"
+            echo "usb_matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
+            echo 'usb_matrix={"device":[]}' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.matrix != '{"device":[]}' }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
+      DEVICE: ${{ matrix.device }}
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+      - name: 调整工作目录到扩容分区
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown "$USER:$USER" /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+      - name: part1 - 准备编译环境与源码
+        run: |
+          export SRC_DIR="$WORKDIR/openwrt"
+          chmod +x "$GITHUB_WORKSPACE/scripts/part1.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+      - name: part2 - 写入设备与个性化配置
+        run: |
+          export SRC_DIR="$WORKDIR/openwrt"
+          chmod +x "$GITHUB_WORKSPACE/scripts/part2.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+      - name: 下载编译所需依赖包
+        run: |
+          cd "$WORKDIR/openwrt"
+          JOBS="$(nproc)"
+          echo "使用 $JOBS 线程下载依赖"
+          make download -j"$JOBS"
+          find dl -type f -size -1024c -delete
+      - name: 开始编译固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          JOBS="$(nproc)"
+          echo "使用 $JOBS 线程编译，设备：$DEVICE"
+          make -j"$JOBS" V=sc
+        timeout-minutes: 300
+      - name: 整理固件产物
+        run: |
+          set -euo pipefail
+          OUT_DIR="$GITHUB_WORKSPACE/firmware/${DEVICE}"
+          TARGET_DIR="$WORKDIR/openwrt/bin/targets"
+          mkdir -p "$OUT_DIR"
+          test -d "$TARGET_DIR"
+          find "$TARGET_DIR" -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' \) -exec cp -t "$OUT_DIR" {} +
+          cp "$WORKDIR/openwrt/.config" "$OUT_DIR/config-${DEVICE}.seed"
+          echo "已收集的产物："
+          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+          if ! find "$OUT_DIR" -maxdepth 1 -type f ! -name '*.seed' -print -quit | grep -q .; then
+            echo "ERROR: 未找到固件文件（BIN/ITB/IMG/sysupgrade/factory）"
+            exit 1
+          fi
+      - name: 上传固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.device }}
+          path: firmware/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  build-usb:
+    needs: prepare
+    if: ${{ needs.prepare.outputs.usb_matrix != '{"device":[]}' }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.usb_matrix) }}
+    env:
+      REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
+      DEVICE: ${{ matrix.device }}
+      ENABLE_USB_MODULES: '1'
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          build-mount-path: /mnt/build
+      - name: 调整工作目录到扩容分区
+        run: |
+          sudo mkdir -p /mnt/build/work
+          sudo chown "$USER:$USER" /mnt/build/work
+          echo "WORKDIR=/mnt/build/work" >> "$GITHUB_ENV"
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: false
+      - name: part1 - 准备编译环境与源码
+        run: |
+          export SRC_DIR="$WORKDIR/openwrt"
+          chmod +x "$GITHUB_WORKSPACE/scripts/part1.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part1.sh"
+      - name: part2 - 写入设备与个性化配置（启用 USB）
+        run: |
+          export SRC_DIR="$WORKDIR/openwrt"
+          export ENABLE_USB_MODULES=1
+          chmod +x "$GITHUB_WORKSPACE/scripts/part2.sh"
+          bash "$GITHUB_WORKSPACE/scripts/part2.sh"
+      - name: 下载编译所需依赖包
+        run: |
+          cd "$WORKDIR/openwrt"
+          JOBS="$(nproc)"
+          echo "USB 构建：$DEVICE，使用 $JOBS 线程下载依赖"
+          make download -j"$JOBS"
+          find dl -type f -size -1024c -delete
+      - name: 开始编译 USB 固件
+        run: |
+          cd "$WORKDIR/openwrt"
+          JOBS="$(nproc)"
+          echo "USB 构建：$DEVICE，使用 $JOBS 线程编译"
+          make -j"$JOBS" V=sc
+        timeout-minutes: 300
+      - name: 整理 USB 固件产物（文件名添加 USB）
+        run: |
+          set -euo pipefail
+          OUT_DIR="$GITHUB_WORKSPACE/firmware-usb/${DEVICE}"
+          TARGET_DIR="$WORKDIR/openwrt/bin/targets"
+          mkdir -p "$OUT_DIR"
+          test -d "$TARGET_DIR"
+          while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            cp "$file" "$OUT_DIR/USB-${base}"
+          done < <(find "$TARGET_DIR" -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' \) -print0)
+          cp "$WORKDIR/openwrt/.config" "$OUT_DIR/config-${DEVICE}-USB.seed"
+          echo "USB 固件产物："
+          find "$OUT_DIR" -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+          if ! find "$OUT_DIR" -maxdepth 1 -type f ! -name '*.seed' -print -quit | grep -q .; then
+            echo "ERROR: 未找到 USB 固件文件"
+            exit 1
+          fi
+      - name: 上传 USB 固件为 Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-usb-${{ matrix.device }}
+          path: firmware-usb/${{ matrix.device }}
+          retention-days: 7
+          if-no-files-found: error
+
+  release:
+    needs: [build, build-usb]
+    if: always() && (needs.build.result == 'success' || needs.build-usb.result == 'success')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 检出本仓库
+        uses: actions/checkout@v4
+      - name: 下载所有固件 Artifact
+        uses: actions/download-artifact@v4
+        with:
+          path: firmware
+      - name: 生成 Release 说明
+        run: |
+          chmod +x scripts/generate-release-notes.sh
+          bash scripts/generate-release-notes.sh
+      - name: 整理发布文件
+        id: meta
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find firmware -type f \( -iname '*.bin' -o -iname '*.itb' -o -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img' -o -iname '*.img.gz' -o -iname '*.seed' \) -exec cp -t release {} +
+          echo "Release 待发布文件："
+          find release -maxdepth 1 -type f -printf '%f (%s bytes)\n'
+          if [ -z "$(find release -maxdepth 1 -type f -print -quit)" ]; then
+            echo "ERROR: Release 目录没有可发布文件"
+            exit 1
+          fi
+          echo "tag=firmware-$(date +'%Y.%m.%d')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+      - name: 发布到 Release 页面
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: OpenWrt 固件自动构建 ${{ steps.meta.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: release/*
