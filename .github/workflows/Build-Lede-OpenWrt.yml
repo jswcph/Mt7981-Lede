@@ -27,6 +27,7 @@ on:
           - nokia_ea0326gmp
           - jcg_q30-pro
           - cmcc_xr30-nand
+          - cmcc_xr30-emmc
           - xiaomi_redmi-router-ax6000
 
       repo_url:
@@ -54,7 +55,7 @@ jobs:
         run: |
           INPUT_DEVICE="${{ github.event.inputs.device }}"
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
-            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"device":["h3c_magic-nx30-pro","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","cmcc_xr30-emmc","xiaomi_redmi-router-ax6000"]}' >> "$GITHUB_OUTPUT"
           else
             echo "matrix={\"device\":[\"$INPUT_DEVICE\"]}" >> "$GITHUB_OUTPUT"
           fi
