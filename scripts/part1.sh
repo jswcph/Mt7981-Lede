@@ -162,50 +162,76 @@ echo "${SRC_DIR}"
 
 
 #=================================================
-# 锐捷  RG-X60 Pro DTS 分区表补丁
-# 上游 ubi 分区默认是 0x3f00000 (63MiB)
-# 这里改成 0x6b00000 (107MiB)，充分利用 Flash 空间
-
+# 按机型应用 DTS 分区补丁（ubi 扩容）
+# 只有 DEVICE 匹配才执行，其他机型直接跳过，互不影响
 #=================================================
 
-RUIJIE_X60_PRO_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
+echo "==== 设备专属分区补丁检查: ${DEVICE:-未指定} ===="
 
-if [ -f "${RUIJIE_X60_PRO_DTS}" ]; then
-  echo "==== 补丁：扩大 Ruijie RG-X60 Pro 的 ubi 分区 ===="
+case "${DEVICE:-}" in
 
-  sed -i \
-    's/reg = <0x680000 0x3f00000>;/reg = <0x680000 0x6b00000>;/' \
-    "${RUIJIE_X60_PRO_DTS}"
+  #---------------- Ruijie RG-X60 Pro: ubi 63M -> 107M ----------------
+  ruijie_rg-x60-pro)
+    RUIJIE_X60_PRO_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
+    if [ ! -f "${RUIJIE_X60_PRO_DTS}" ]; then
+      echo "ERROR: 找不到 ${RUIJIE_X60_PRO_DTS}"
+      exit 1
+    fi
+    echo "==== 补丁：扩大 Ruijie RG-X60 Pro 的 ubi 分区 ===="
+    sed -i 's/reg = <0x680000 0x3f00000>;/reg = <0x680000 0x6b00000>;/' "${RUIJIE_X60_PRO_DTS}"
+    grep -n 'reg = <0x680000' "${RUIJIE_X60_PRO_DTS}"
+    if ! grep -q 'reg = <0x680000 0x6b00000>;' "${RUIJIE_X60_PRO_DTS}"; then
+      echo "ERROR: Ruijie ubi 补丁未生效"
+      exit 1
+    fi
+    echo ">>> Ruijie RG-X60 Pro 107M 补丁应用成功"
+    ;;
 
-  echo ">>> 补丁后的分区行："
-  grep -n 'reg = <0x680000' "${RUIJIE_X60_PRO_DTS}"
-else
-  echo "==== 未找到 Ruijie RG-X60 Pro 的 DTS，跳过补丁 ===="
-fi
+  #---------------- H3C Magic NX30 Pro: 112M ----------------
+  h3c_magic-nx30-pro)
+    NX30_PRO_PATCH="${GITHUB_WORKSPACE}/patches/991-h3c-magic-nx30-pro-112m.patch"
+    if [ ! -f "${NX30_PRO_PATCH}" ]; then
+      echo "ERROR: 找不到补丁文件：${NX30_PRO_PATCH}"
+      exit 1
+    fi
+    if git apply --check "${NX30_PRO_PATCH}" 2>/dev/null; then
+      git apply "${NX30_PRO_PATCH}"
+      echo ">>> NX30 Pro 112M 分区补丁应用成功"
+    elif git apply --reverse --check "${NX30_PRO_PATCH}" 2>/dev/null; then
+      echo ">>> NX30 Pro 补丁已应用过，跳过"
+    else
+      echo "ERROR: NX30 Pro 补丁无法应用，请检查与当前源码是否匹配"
+      exit 1
+    fi
+    ;;
 
-#=================================================
-# H3C Magic NX30 Pro 112M 分区扩容补丁
-#=================================================
+  #---------------- Nokia EA0326GMP: ubi 118M ----------------
+  nokia_ea0326gmp)
+    NOKIA_DTS="$(find "${SRC_DIR}/target/linux/mediatek" -type f -name '*nokia-ea0326gmp*.dts' 2>/dev/null | head -n1)"
+    if [ -z "${NOKIA_DTS}" ] || [ ! -f "${NOKIA_DTS}" ]; then
+      echo "ERROR: 找不到 Nokia EA0326GMP 的 DTS"
+      exit 1
+    fi
+    echo "==== 补丁：扩大 Nokia EA0326GMP 的 ubi 分区 ===="
+    echo ">>> DTS: ${NOKIA_DTS}"
+    sed -i \
+      -e 's/partition@2180000/partition@980000/' \
+      -e 's/reg = <0x2180000 0x5680000>;/reg = <0x980000 0x7680000>;/' \
+      "${NOKIA_DTS}"
+    echo ">>> 补丁后的分区信息："
+    grep -n -E 'partition@|label =|reg = <0x' "${NOKIA_DTS}"
+    if ! grep -q 'reg = <0x980000 0x7680000>;' "${NOKIA_DTS}"; then
+      echo "ERROR: Nokia ubi 补丁未生效，请检查 DTS 中原分区定义"
+      exit 1
+    fi
+    echo ">>> Nokia EA0326GMP 118M 补丁应用成功"
+    ;;
 
-echo "==== 检查 H3C Magic NX30 Pro 112M 补丁 ===="
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NX30_PRO_PATCH="${GITHUB_WORKSPACE}/patches/991-h3c-magic-nx30-pro-112m.patch"
-if [ -f "${NX30_PRO_PATCH}" ]; then
-  echo ">>> 找到 NX30 Pro 补丁"
-
-  if git apply --check "${NX30_PRO_PATCH}"; then
-    git apply "${NX30_PRO_PATCH}"
-    echo ">>> NX30 Pro 112M 分区补丁应用成功"
-  else
-    echo "ERROR: NX30 Pro 补丁无法应用"
-    echo "请检查补丁是否已应用，或与当前源码是否匹配"
-    exit 1
-  fi
-else
-  echo "ERROR: 找不到补丁文件：${NX30_PRO_PATCH}"
-  exit 1
-fi
+  #---------------- 其他机型：不做任何分区补丁 ----------------
+  *)
+    echo ">>> ${DEVICE:-未指定} 无分区补丁，跳过"
+    ;;
+esac
 #=================================================
 # [3/5] 写入自定义 Feeds
 #=================================================
