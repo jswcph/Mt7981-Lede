@@ -1,0 +1,166 @@
+name: Build LEDE iStore New
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "设备配置名（不含 .config）；选择 all 构建全部设备"
+        required: true
+        type: choice
+        options:
+          - all
+          - abt_asr3000
+          - cmcc_rax3000m-emmc
+          - cmcc_rax3000m-nand
+          - cmcc_rax3000me-nand
+          - cmcc_xr30-nand
+          - h3c_magic-nx30-pro
+          - jcg_q30-pro
+          - netcore_n60
+          - netcore_n60-pro
+          - nokia_ea0326gmp
+          - qihoo_360t7
+          - ruijie_rg-x60-pro
+          - xiaomi_mi-router-ax3000t
+          - xiaomi_mi-router-wr30u
+          - xiaomi_redmi-router-ax6000
+
+      repo_url:
+        description: "OpenWrt 源码仓库"
+        required: true
+        default: "https://github.com/coolsnowwolf/lede"
+        type: string
+
+      repo_branch:
+        description: "OpenWrt 源码分支"
+        required: true
+        default: "master"
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  TZ: Asia/Shanghai
+  UPLOAD_FIRMWARE: "true"
+  UPLOAD_RELEASE: "true"
+
+jobs:
+  build:
+    name: Build ${{ matrix.device }}
+    if: ${{ inputs.device == 'all' || inputs.device == matrix.device }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        device:
+          - abt_asr3000
+          - cmcc_rax3000m-emmc
+          - cmcc_rax3000m-nand
+          - cmcc_rax3000me-nand
+          - cmcc_xr30-nand
+          - h3c_magic-nx30-pro
+          - jcg_q30-pro
+          - netcore_n60
+          - netcore_n60-pro
+          - nokia_ea0326gmp
+          - qihoo_360t7
+          - ruijie_rg-x60-pro
+          - xiaomi_mi-router-ax3000t
+          - xiaomi_mi-router-wr30u
+          - xiaomi_redmi-router-ax6000
+
+    steps:
+      - name: Checkout build scripts and configs
+        uses: actions/checkout@v4
+        with:
+          ref: lede-mt7981-istore
+
+      - name: Validate device config
+        shell: bash
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          set -euo pipefail
+          CONFIG="config/devices/${DEVICE}.config"
+          if [ ! -f "$CONFIG" ]; then
+            echo "错误：找不到设备配置：$CONFIG"
+            exit 1
+          fi
+          echo "设备配置检查通过：$CONFIG"
+
+      - name: Run part1 - prepare source, feeds and Mihomo
+        shell: bash
+        env:
+          REPO_URL: ${{ inputs.repo_url }}
+          REPO_BRANCH: ${{ inputs.repo_branch }}
+          SRC_DIR: ${{ github.workspace }}/openwrt
+        run: |
+          set -euo pipefail
+          bash scripts/part1.sh
+
+      - name: Run part2 - configure firmware
+        shell: bash
+        env:
+          DEVICE: ${{ matrix.device }}
+          SRC_DIR: ${{ github.workspace }}/openwrt
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          bash scripts/part2.sh
+
+      - name: Compile firmware
+        working-directory: openwrt
+        shell: bash
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" V=sc
+
+      - name: Collect firmware files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p firmware
+          find openwrt/bin/targets -type f \( \
+            -name '*sysupgrade*' -o \
+            -name '*factory*' -o \
+            -name '*.img.gz' -o \
+            -name '*.bin' -o \
+            -name '*.itb' \
+          \) -exec cp -v {} firmware/ \;
+          if ! find firmware -maxdepth 1 -type f | grep -q .; then
+            echo "错误：没有找到可发布的固件文件"
+            exit 1
+          fi
+          echo "收集到的固件："
+          ls -lh firmware
+
+      - name: Upload firmware artifact
+        if: ${{ env.UPLOAD_FIRMWARE == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: LEDE-iStore-${{ matrix.device }}-${{ github.run_number }}
+          path: firmware/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub Release
+        if: ${{ env.UPLOAD_RELEASE == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: LEDE-iStore-${{ matrix.device }}-${{ github.run_number }}
+          name: LEDE-iStore ${{ matrix.device }} #${{ github.run_number }}
+          body: |
+            自动构建的 LEDE-iStore 固件。
+
+            - 设备：${{ matrix.device }}
+            - 源码：${{ inputs.repo_url }}
+            - 分支：${{ inputs.repo_branch }}
+            - 工作流运行：${{ github.run_number }}
+          files: firmware/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
