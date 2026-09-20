@@ -1,4 +1,4 @@
-name: Build-Lele-istore
+name: Build-Leleistore
 
 on:
   workflow_dispatch:
