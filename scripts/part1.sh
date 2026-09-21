@@ -1,16 +1,16 @@
 #!/bin/bash
 #=================================================
 # part1.sh
-# ImmortalWrt + PassWall + OpenClash + Mihomo Meta
+# LEDE + PassWall + OpenClash + Mihomo Meta
 #=================================================
 set -e
 
-REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
+REPO_URL="${REPO_URL:-https://github.com/coolsnowwolf/lede}"
 REPO_BRANCH="${REPO_BRANCH:-master}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
 
 echo "==============================================="
-echo "       ImmortalWrt Build Environment"
+echo "      LEDE Build Environment"
 echo "==============================================="
 
 #=================================================
@@ -140,7 +140,7 @@ echo ">>> Go 环境检查通过"
 
 
 #=================================================
-# [2/5] 克隆 ImmortalWrt
+# [2/5] 克隆 LEDE仓库
 #=================================================
 
 echo "==== [2/5] 克隆源码: ${REPO_URL} ===="
@@ -157,13 +157,14 @@ git clone \
 
 cd "${SRC_DIR}"
 
-echo ">>> ImmortalWrt 源码目录:"
+echo ">>> LEDE 源码目录:"
 echo "${SRC_DIR}"
 
 
 #=================================================
 # 按机型应用 DTS 分区补丁（ubi 扩容）
 # 只有 DEVICE 匹配才执行，其他机型直接跳过，互不影响
+# 全部按内容检索替换，不依赖 patches/ 目录
 #=================================================
 
 echo "==== 设备专属分区补丁检查: ${DEVICE:-未指定} ===="
@@ -178,53 +179,76 @@ case "${DEVICE:-}" in
       exit 1
     fi
     echo "==== 补丁：扩大 Ruijie RG-X60 Pro 的 ubi 分区 ===="
-    sed -i 's/reg = <0x680000 0x3f00000>;/reg = <0x680000 0x6b00000>;/' "${RUIJIE_X60_PRO_DTS}"
-    grep -n 'reg = <0x680000' "${RUIJIE_X60_PRO_DTS}"
-    if ! grep -q 'reg = <0x680000 0x6b00000>;' "${RUIJIE_X60_PRO_DTS}"; then
-      echo "ERROR: Ruijie ubi 补丁未生效"
-      exit 1
-    fi
+
+    # 按 label 定位 ubi，改大小为 0x6b00000 (107MiB)
+    perl -0pi -e 's/(label = "ubi";\s*reg = <0x680000 )0x[0-9a-fA-F]+(>;)/${1}0x6b00000${2}/' "${RUIJIE_X60_PRO_DTS}"
+
+    echo ">>> 补丁后的分区信息："
+    grep -n -E 'partition@|label =|reg = <0x' "${RUIJIE_X60_PRO_DTS}"
+
+    grep -q 'reg = <0x680000 0x6b00000>;' "${RUIJIE_X60_PRO_DTS}" \
+      || { echo "ERROR: Ruijie ubi 补丁未生效"; exit 1; }
     echo ">>> Ruijie RG-X60 Pro 107M 补丁应用成功"
     ;;
 
-  #---------------- H3C Magic NX30 Pro: 112M ----------------
+  #---------------- H3C Magic NX30 Pro: ubi 扩容 112M ----------------
   h3c_magic-nx30-pro)
-    NX30_PRO_PATCH="${GITHUB_WORKSPACE}/patches/991-h3c-magic-nx30-pro-112m.patch"
-    if [ ! -f "${NX30_PRO_PATCH}" ]; then
-      echo "ERROR: 找不到补丁文件：${NX30_PRO_PATCH}"
+    NX30_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
+    export NX30_UBI_SIZE="0x7000000"   # 112MiB，如需其他大小改这里
+
+    if [ ! -f "${NX30_DTS}" ]; then
+      echo "ERROR: 找不到 ${NX30_DTS}"
       exit 1
     fi
-    if git apply --check "${NX30_PRO_PATCH}" 2>/dev/null; then
-      git apply "${NX30_PRO_PATCH}"
-      echo ">>> NX30 Pro 112M 分区补丁应用成功"
-    elif git apply --reverse --check "${NX30_PRO_PATCH}" 2>/dev/null; then
-      echo ">>> NX30 Pro 补丁已应用过，跳过"
-    else
-      echo "ERROR: NX30 Pro 补丁无法应用，请检查与当前源码是否匹配"
-      exit 1
+    echo "==== 补丁：H3C Magic NX30 Pro ubi 扩容到 ${NX30_UBI_SIZE} ===="
+
+    # 按 label 定位 ubi，改大小
+    perl -0pi -e 's/(label = "ubi";\s*reg = <0x0*580000 )0x[0-9a-fA-F]+(>;)/$1$ENV{NX30_UBI_SIZE}$2/' "${NX30_DTS}"
+
+    # 按 label 删除 ubi 后面的 4 个分区（含前面的注释）
+    perl -0pi -e 's/(?:[ \t]*\/\*[^*]*\*\/[ \t]*\n)?[ \t]*partition\@[0-9a-fA-F]+ \{\s*label = "(?:pdt_data|pdt_data_1|exp|plugin)";.*?\};\n//gs' "${NX30_DTS}"
+
+    echo ">>> 补丁后的分区信息："
+    grep -n -E 'partition@|label =|reg = <0x' "${NX30_DTS}"
+
+    grep -q "reg = <0x0*580000 ${NX30_UBI_SIZE}>;" "${NX30_DTS}" \
+      || { echo "ERROR: NX30 Pro ubi 大小未修改成功"; exit 1; }
+    if grep -q -E 'label = "(pdt_data|pdt_data_1|exp|plugin)"' "${NX30_DTS}"; then
+      echo "ERROR: NX30 Pro 多余分区未删除干净"; exit 1
     fi
+    echo ">>> NX30 Pro ubi 扩容完成"
     ;;
 
-  #---------------- Nokia EA0326GMP: ubi 118M ----------------
+  #---------------- Nokia EA0326GMP: ubi 扩容 ----------------
+  # 分区表：删除 Aos-net / bvasPlugin，ubi 改为 0x980000 / 0x7680000
   nokia_ea0326gmp)
     NOKIA_DTS="$(find "${SRC_DIR}/target/linux/mediatek" -type f -name '*nokia-ea0326gmp*.dts' 2>/dev/null | head -n1)"
     if [ -z "${NOKIA_DTS}" ] || [ ! -f "${NOKIA_DTS}" ]; then
       echo "ERROR: 找不到 Nokia EA0326GMP 的 DTS"
       exit 1
     fi
-    echo "==== 补丁：扩大 Nokia EA0326GMP 的 ubi 分区 ===="
+    echo "==== 补丁：Nokia EA0326GMP ubi  扩容 ===="
     echo ">>> DTS: ${NOKIA_DTS}"
-    sed -i \
-      -e 's/partition@2180000/partition@980000/' \
-      -e 's/reg = <0x2180000 0x5680000>;/reg = <0x980000 0x7680000>;/' \
-      "${NOKIA_DTS}"
+
+    # 1) 按 label 删除 Aos-net / bvasPlugin 分区
+    perl -0pi -e 's/[ \t]*partition\@[0-9a-fA-F]+ \{\s*label = "(?:Aos-net|bvasPlugin)";.*?\};\n(?:[ \t]*\n)?//gs' "${NOKIA_DTS}"
+
+    # 2) 按 label 改写 ubi：节点名、compatible、reg
+    perl -0pi -e 's/partition\@[0-9a-fA-F]+ \{(\s*)(?:compatible = "linux,ubi";\s*)?label = "ubi";(\s*)reg = <[^>]*>;/partition\@980000 {$1compatible = "linux,ubi";$1label = "ubi";$2reg = <0x980000 0x7680000>;/' "${NOKIA_DTS}"
+
     echo ">>> 补丁后的分区信息："
-    grep -n -E 'partition@|label =|reg = <0x' "${NOKIA_DTS}"
-    if ! grep -q 'reg = <0x980000 0x7680000>;' "${NOKIA_DTS}"; then
-      echo "ERROR: Nokia ubi 补丁未生效，请检查 DTS 中原分区定义"
-      exit 1
+    grep -n -E 'partition@|label =|compatible = "linux,ubi"|reg = <0x' "${NOKIA_DTS}"
+
+    grep -q 'reg = <0x980000 0x7680000>;' "${NOKIA_DTS}" \
+      || { echo "ERROR: Nokia ubi 大小未修改成功"; exit 1; }
+    grep -q 'compatible = "linux,ubi";' "${NOKIA_DTS}" \
+      || { echo "ERROR: Nokia ubi 缺少 compatible"; exit 1; }
+    if grep -q -E 'label = "(Aos-net|bvasPlugin)"' "${NOKIA_DTS}"; then
+      echo "ERROR: Aos-net/bvasPlugin 未删除干净"; exit 1
     fi
-    echo ">>> Nokia EA0326GMP 118M 补丁应用成功"
+    [ "$(grep -c 'partition@980000' "${NOKIA_DTS}")" -eq 1 ] \
+      || { echo "ERROR: partition@980000 节点数量不是 1"; exit 1; }
+    echo ">>> Nokia EA0326GMP ubi 扩容完成"
     ;;
 
   #---------------- 其他机型：不做任何分区补丁 ----------------
@@ -250,15 +274,6 @@ echo "    PassWall"
 echo "    PassWall Packages"
 echo "    OpenClash"
 echo "    Argon Theme"
-
-#=================================================
-# iStore 已禁用
-#=================================================
-
-#echo "==== 添加 iStore 商店 ===="
-#rm -rf package/istore
-#git clone --depth=1 -b main https://github.com/linkease/istore.git package/istore
-
 
 #=================================================
 # [4/5] 编译 Mihomo Meta ARM64
@@ -418,7 +433,7 @@ echo "==============================================="
 echo "       part1.sh 执行完毕"
 echo "==============================================="
 
-echo ">>> ImmortalWrt 源码:"
+echo ">>> LEDE 源码:"
 echo "${SRC_DIR}"
 
 echo ">>> Mihomo 核心:"
