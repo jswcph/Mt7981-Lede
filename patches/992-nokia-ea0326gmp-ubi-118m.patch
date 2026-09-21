@@ -1,9 +1,0 @@
---- a/target/linux/mediatek/dts/mt7981b-nokia-ea0326gmp.dts
-+++ b/target/linux/mediatek/dts/mt7981b-nokia-ea0326gmp.dts
-@@ -202,9 +202,9 @@
--			partition@2180000 {
-+			partition@980000 {
- 				label = "ubi";
--				reg = <0x2180000 0x5680000>;
-+				reg = <0x980000 0x7680000>;
- 			};
