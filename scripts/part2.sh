@@ -64,7 +64,7 @@ rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
 cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 # 确保首次开机脚本有执行权限（git 有时不保留执行位）
-find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \\\;
+find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
 
 echo "==== 写回预编译的 Mihomo Meta 核心 ===="
 mkdir -p "${SRC_DIR}/files/etc/openclash/core"
