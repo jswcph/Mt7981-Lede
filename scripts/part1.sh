@@ -8,6 +8,10 @@ set -e
 REPO_URL="${REPO_URL:-https://github.com/immortalwrt/immortalwrt}"
 REPO_BRANCH="${REPO_BRANCH:-master}"
 SRC_DIR="${SRC_DIR:-$(pwd)/openwrt}"
+BASE_DIR="${GITHUB_WORKSPACE:-$(pwd)}"
+
+# 脚本在仓库根目录执行时，确保补丁路径始终指向本仓库。
+PATCH_DIR="${BASE_DIR}/patches"
 
 echo "==============================================="
 echo "       ImmortalWrt Build Environment"
@@ -55,7 +59,7 @@ cd "${SRC_DIR}"
 # 锐捷 RG-X60 / RG-X60 Pro 107MiB UBI 分区补丁
 #=================================================
 if [ "${DEVICE:-}" = "ruijie_rg-x60" ] || [ "${DEVICE:-}" = "ruijie_rg-x60-pro" ]; then
-    PATCH_FILE="${GITHUB_WORKSPACE}/patches/990-ruijie-rg-x60-107m.patch"
+    PATCH_FILE="${PATCH_DIR}/990-ruijie-rg-x60-107m.patch"
     echo "==== 应用 Ruijie RG-X60 / X60 Pro 107MiB UBI 分区补丁 ===="
     [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
     patch -p1 --forward < "${PATCH_FILE}"
@@ -69,7 +73,7 @@ fi
 # H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁
 #=================================================
 if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ]; then
-    PATCH_FILE="${GITHUB_WORKSPACE}/patches/991-h3c-magic-nx30-pro-112m.patch"
+    PATCH_FILE="${PATCH_DIR}/991-h3c-magic-nx30-pro-112m.patch"
     echo "==== 应用 H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁 ===="
     [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
     patch -p1 --forward < "${PATCH_FILE}"
@@ -85,7 +89,7 @@ fi
 # 独立补丁仅调整继承的基础 DTS，不套用普通版镜像生成规则
 #=================================================
 if [ "${DEVICE:-}" = "h3c_magic-nx30-pro-nmbm" ]; then
-    PATCH_FILE="${GITHUB_WORKSPACE}/patches/992-h3c-magic-nx30-pro-nmbm-112m.patch"
+    PATCH_FILE="${PATCH_DIR}/992-h3c-magic-nx30-pro-nmbm-112m.patch"
     echo "==== 应用 H3C NX30 Pro NMBM UBI 分区补丁 ===="
     [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
     patch -p1 --forward < "${PATCH_FILE}"
