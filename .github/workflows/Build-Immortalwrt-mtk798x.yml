@@ -1,4 +1,3 @@
-```yaml
 name: Build Immortalwrt-mtk798x
 
 on:
@@ -237,4 +236,3 @@ jobs:
           name: OpenWrt 固件自动构建 ${{ steps.meta.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
-```
