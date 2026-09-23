@@ -3,7 +3,7 @@
 # part2.sh
 # 功能：合并 通用配置 + 设备配置 生成 .config
 #       写入默认系统设置覆盖目录 files/
-#       可选启用 USB 存储/NAS/串口/网卡模块
+#       对需要 USB 的设备自动启用 USB 存储/NAS/串口/网卡模块
 #       执行 defconfig 解析依赖
 #=================================================
 set -e
@@ -27,9 +27,12 @@ fi
 echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
 
-if [ "${ENABLE_USB_MODULES:-0}" = "1" ]; then
-  echo "==== USB 专用构建：启用 USB 存储/NAS/串口/网卡模块 ===="
-  cat >> "${SRC_DIR}/.config" <<'USB_CONFIG'
+# 不再依赖独立 USB Job 的 ENABLE_USB_MODULES 环境变量。
+# 统一构建时，根据当前 matrix 设备自动决定是否加入 USB 相关包。
+case "${DEVICE}" in
+  cmcc_rax3000m-nand|cmcc_rax3000me-nand|cmcc_rax3000m-emmc|cmcc_xr30-nand|netcore_n60-pro)
+    echo "==== ${DEVICE}：自动启用 USB 存储/NAS/串口/网卡模块 ===="
+    cat >> "${SRC_DIR}/.config" <<'USB_CONFIG'
 CONFIG_USB_SUPPORT=y
 CONFIG_PACKAGE_kmod-usb-storage=y
 CONFIG_PACKAGE_kmod-usb-storage-extras=y
@@ -48,14 +51,20 @@ CONFIG_PACKAGE_kmod-usb-net=y
 CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
 CONFIG_PACKAGE_kmod-usb-net-rndis=y
 USB_CONFIG
-fi
+    ENABLE_USB_FOR_DEVICE=1
+    ;;
+  *)
+    echo "==== ${DEVICE}：不额外添加 USB 专用模块 ===="
+    ENABLE_USB_FOR_DEVICE=0
+    ;;
+esac
 
 echo "==== 写入默认系统设置覆盖目录 files/ ===="
 rm -rf "${SRC_DIR}/files"
 mkdir -p "${SRC_DIR}/files"
 cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 # 确保首次开机脚本有执行权限（git 有时不保留执行位）
-find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
+find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \\\;
 
 echo "==== 写回预编译的 Mihomo Meta 核心 ===="
 mkdir -p "${SRC_DIR}/files/etc/openclash/core"
@@ -70,7 +79,7 @@ echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
 
-if [ "${ENABLE_USB_MODULES:-0}" = "1" ]; then
+if [ "${ENABLE_USB_FOR_DEVICE:-0}" = "1" ]; then
   echo "==== USB 配置解析结果（defconfig 后）===="
   USB_SYMBOLS=(
     CONFIG_USB_SUPPORT
