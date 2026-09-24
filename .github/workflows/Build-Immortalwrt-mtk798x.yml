@@ -17,18 +17,16 @@ on:
           - h3c_magic-nx30-pro-nmbm
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
-          - cmcc_rax3000m-nand
-          - cmcc_rax3000me-nand
-          - cmcc_rax3000m-emmc
+          - cmcc_rax3000m
+          - cmcc_rax3000me
           - netcore_n60
           - netcore_n60-pro
-          - xiaomi_mi-router-wr30u
+          - xiaomi_mi-router-wr30u-stock
           - abt_asr3000
           - ruijie_rg-x60-pro
           - nokia_ea0326gmp
           - jcg_q30-pro
-          - cmcc_xr30-nand
-          - xiaomi_redmi-router-ax6000
+          - xiaomi_redmi-router-ax6000-stock
 
       repo_url:
         description: '源码仓库地址（ImmortalWrt）'
@@ -61,7 +59,7 @@ jobs:
 
           INPUT_DEVICE="${{ github.event.inputs.device }}"
 
-          ALL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]'
+          ALL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m","cmcc_rax3000me","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u-stock","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","xiaomi_redmi-router-ax6000-stock"]'
 
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
             echo "matrix={\"device\":$ALL}" >> "$GITHUB_OUTPUT"
@@ -152,25 +150,19 @@ jobs:
           mkdir -p "$OUT_DIR"
           test -d "$TARGET_DIR"
 
+          # 只保留正式固件：sysupgrade（升级固件）和 factory（出厂/首刷固件）
+          # 不收集 bl2 / fip / preloader / gpt / initramfs 等引导与救援文件
           find "$TARGET_DIR" -type f \
-            \( -iname '*.bin' \
-            -o -iname '*.itb' \
-            -o -iname '*sysupgrade*' \
-            -o -iname '*factory*' \
-            -o -iname '*.img' \
-            -o -iname '*.img.gz' \) \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' \) \
+            \( -iname '*.bin' -o -iname '*.itb' -o -iname '*.img' -o -iname '*.img.gz' -o -iname '*.ubi' \) \
             -exec cp -t "$OUT_DIR" {} +
-
-          cp "$WORKDIR/openwrt/.config" \
-            "$OUT_DIR/config-${DEVICE}.seed"
 
           echo "已收集的产物："
           find "$OUT_DIR" -maxdepth 1 -type f \
             -printf '%f (%s bytes)\n'
 
-          if ! find "$OUT_DIR" -maxdepth 1 -type f \
-            ! -name '*.seed' -print -quit | grep -q .; then
-            echo "ERROR: 未找到固件文件（BIN/ITB/IMG/sysupgrade/factory）"
+          if ! find "$OUT_DIR" -maxdepth 1 -type f -print -quit | grep -q .; then
+            echo "ERROR: 未找到正式固件文件（sysupgrade / factory）"
             exit 1
           fi
 
@@ -208,22 +200,26 @@ jobs:
 
           mkdir -p release
 
-          find firmware -type f \
-            \( -iname '*.bin' \
-            -o -iname '*.itb' \
-            -o -iname '*sysupgrade*' \
-            -o -iname '*factory*' \
-            -o -iname '*.img' \
-            -o -iname '*.img.gz' \
-            -o -iname '*.seed' \) \
-            -exec cp -t release {} +
+          # 只发布正式固件（sysupgrade / factory）
+          # 逐个复制：目标已存在则跳过，避免同名文件让 cp 报错
+          while IFS= read -r -d '' f; do
+            dest="release/$(basename "$f")"
+            if [ -e "$dest" ]; then
+              echo "跳过同名文件：$f"
+            else
+              cp "$f" "$dest"
+            fi
+          done < <(find firmware -type f \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' \) \
+            \( -iname '*.bin' -o -iname '*.itb' -o -iname '*.img' -o -iname '*.img.gz' -o -iname '*.ubi' \) \
+            -print0)
 
           echo "Release 待发布文件："
           find release -maxdepth 1 -type f \
             -printf '%f (%s bytes)\n'
 
           if [ -z "$(find release -maxdepth 1 -type f -print -quit)" ]; then
-            echo "ERROR: Release 目录没有可发布文件"
+            echo "ERROR: Release 目录没有可发布的正式固件"
             exit 1
           fi
 
