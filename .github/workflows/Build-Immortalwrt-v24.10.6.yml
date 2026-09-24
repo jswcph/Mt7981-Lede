@@ -34,9 +34,9 @@ on:
         default: 'https://github.com/immortalwrt/immortalwrt'
 
       repo_branch:
-        description: '源码分支'
+        description: '源码分支或标签（正式版填标签如 v24.10.6；最新开发版填 openwrt-24.10）'
         required: false
-        default: 'openwrt-24.10'
+        default: 'v24.10.6'
 
 env:
   TZ: Asia/Shanghai
@@ -77,7 +77,7 @@ jobs:
 
     env:
       REPO_URL: ${{ github.event.inputs.repo_url || 'https://github.com/immortalwrt/immortalwrt' }}
-      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'openwrt-24.10' }}
+      REPO_BRANCH: ${{ github.event.inputs.repo_branch || 'v24.10.6' }}
       DEVICE: ${{ matrix.device }}
 
     steps:
