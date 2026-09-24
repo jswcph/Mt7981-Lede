@@ -3,7 +3,7 @@
 # part2.sh
 # 功能：合并 通用配置 + 设备配置 生成 .config
 #       写入默认系统设置覆盖目录 files/
-#       对需要 USB 的设备自动启用 USB 存储/NAS/串口/网卡模块
+#       对带 USB 口的设备追加 config/usb.config（存储/4G/CPE/USB网卡）
 #       执行 defconfig 解析依赖
 #=================================================
 set -e
@@ -27,37 +27,32 @@ fi
 echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
 
-# 不再依赖独立 USB Job 的 ENABLE_USB_MODULES 环境变量。
-# 统一构建时，根据当前 matrix 设备自动决定是否加入 USB 相关包。
-case "${DEVICE}" in
-  cmcc_rax3000m|cmcc_rax3000me|netcore_n60-pro)
-    echo "==== ${DEVICE}：自动启用 USB 存储/NAS/串口/网卡模块 ===="
-    cat >> "${SRC_DIR}/.config" <<'USB_CONFIG'
-CONFIG_USB_SUPPORT=y
-CONFIG_PACKAGE_kmod-usb-storage=y
-CONFIG_PACKAGE_kmod-usb-storage-extras=y
-CONFIG_PACKAGE_kmod-usb-storage-uas=y
-CONFIG_PACKAGE_kmod-fs-ext4=y
-CONFIG_PACKAGE_kmod-fs-vfat=y
-CONFIG_PACKAGE_kmod-fs-exfat=y
-CONFIG_PACKAGE_kmod-nls-cp437=y
-CONFIG_PACKAGE_kmod-nls-iso8859-1=y
-CONFIG_PACKAGE_kmod-nls-utf8=y
-CONFIG_PACKAGE_block-mount=y
-CONFIG_PACKAGE_kmod-usb-serial=y
-CONFIG_PACKAGE_kmod-usb-serial-option=y
-CONFIG_PACKAGE_kmod-usb-serial-wwan=y
-CONFIG_PACKAGE_kmod-usb-net=y
-CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
-CONFIG_PACKAGE_kmod-usb-net-rndis=y
-USB_CONFIG
+# 需要 USB 支持的设备：硬件带 USB 口（源码 filogic.mk 中带 kmod-usb3 的设备）。
+# 新增带 USB 的设备时，只需要在这里加设备名。
+# USB 相关的包统一维护在 config/usb.config，不要再写进各设备的 .config。
+USB_DEVICES="cmcc_rax3000m cmcc_rax3000me netcore_n60-pro"
+USB_CONFIG_FILE="${BASE_DIR}/config/usb.config"
+
+ENABLE_USB_FOR_DEVICE=0
+for d in ${USB_DEVICES}; do
+  if [ "$d" = "${DEVICE}" ]; then
     ENABLE_USB_FOR_DEVICE=1
-    ;;
-  *)
-    echo "==== ${DEVICE}：不额外添加 USB 专用模块 ===="
-    ENABLE_USB_FOR_DEVICE=0
-    ;;
-esac
+    break
+  fi
+done
+
+if [ "${ENABLE_USB_FOR_DEVICE}" = "1" ]; then
+  if [ ! -f "${USB_CONFIG_FILE}" ]; then
+    echo "错误：找不到 USB 配置文件 ${USB_CONFIG_FILE}"
+    exit 1
+  fi
+  echo "==== ${DEVICE}：追加 USB 存储/4G/CPE/USB网卡配置（config/usb.config）===="
+  # 前面补一个空行，避免上一个文件末尾没有换行导致两行粘在一起
+  printf '\n' >> "${SRC_DIR}/.config"
+  cat "${USB_CONFIG_FILE}" >> "${SRC_DIR}/.config"
+else
+  echo "==== ${DEVICE}：无 USB 口，不追加 USB 配置 ===="
+fi
 
 echo "==== 写入默认系统设置覆盖目录 files/ ===="
 rm -rf "${SRC_DIR}/files"
@@ -79,42 +74,47 @@ echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
 
-if ! grep -q "^CONFIG_TARGET_mediatek_filogic_DEVICE_.*=y" .config; then
-  echo "ERROR: 没有选中任何设备，设备名可能写错"
+#=================================================
+# 校验 1：目标设备必须被 defconfig 精确选中
+# 设备名写错时，defconfig 会静默丢弃该项，并回退到列表里的第一个设备
+# （abt_asr3000），所以不能只检查“有没有选中设备”，必须检查是不是这一个。
+#=================================================
+DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE}"
+if ! grep -qx "${DEVICE_SYMBOL}=y" .config; then
+  echo "ERROR: 目标设备 ${DEVICE} 没有被选中，设备名可能与源码不一致"
+  echo "defconfig 实际选中的设备："
+  grep "^CONFIG_TARGET_.*_DEVICE_.*=y" .config || echo "  （无）"
+  echo "请对照 target/linux/mediatek/image/filogic.mk 里的 TARGET_DEVICES 检查设备名"
   exit 1
 fi
 
-echo "==== defconfig 最终选中的 Filogic 设备 ===="
-grep "^CONFIG_TARGET_mediatek_filogic_DEVICE_.*=y" .config
+echo "==== defconfig 最终选中的设备 ===="
+grep "^CONFIG_TARGET_.*_DEVICE_.*=y" .config
 
-if [ "${ENABLE_USB_FOR_DEVICE:-0}" = "1" ]; then
+#=================================================
+# 校验 2：USB 配置必须完整生效（缺任何一个包都直接失败）
+# 符号列表直接读取 config/usb.config，不再在脚本里重复维护一份。
+#=================================================
+if [ "${ENABLE_USB_FOR_DEVICE}" = "1" ]; then
   echo "==== USB 配置解析结果（defconfig 后）===="
-  USB_SYMBOLS=(
-    CONFIG_USB_SUPPORT
-    CONFIG_PACKAGE_kmod-usb-storage
-    CONFIG_PACKAGE_kmod-usb-storage-extras
-    CONFIG_PACKAGE_kmod-usb-storage-uas
-    CONFIG_PACKAGE_kmod-fs-ext4
-    CONFIG_PACKAGE_kmod-fs-vfat
-    CONFIG_PACKAGE_kmod-fs-exfat
-    CONFIG_PACKAGE_kmod-nls-cp437
-    CONFIG_PACKAGE_kmod-nls-iso8859-1
-    CONFIG_PACKAGE_kmod-nls-utf8
-    CONFIG_PACKAGE_block-mount
-    CONFIG_PACKAGE_kmod-usb-serial
-    CONFIG_PACKAGE_kmod-usb-serial-option
-    CONFIG_PACKAGE_kmod-usb-serial-wwan
-    CONFIG_PACKAGE_kmod-usb-net
-    CONFIG_PACKAGE_kmod-usb-net-cdc-ether
-    CONFIG_PACKAGE_kmod-usb-net-rndis
-  )
-  for symbol in "${USB_SYMBOLS[@]}"; do
-    if grep -qx "${symbol}=y" .config; then
-      echo "[USB OK] ${symbol}=y"
+  USB_MISSING=0
+  while IFS= read -r line; do
+    case "${line}" in
+      CONFIG_*=y) ;;
+      *) continue ;;
+    esac
+    if grep -qx "${line}" .config; then
+      echo "[USB OK]      ${line}"
     else
-      echo "[USB WARN] ${symbol} 未解析为 y（可能上游无此选项或依赖不满足）"
+      echo "[USB MISSING] ${line}"
+      USB_MISSING=1
     fi
-  done
+  done < "${USB_CONFIG_FILE}"
+
+  if [ "${USB_MISSING}" != "0" ]; then
+    echo "ERROR: 部分 USB 配置没有生效（包名不存在或依赖不满足），请检查上面的 [USB MISSING]"
+    exit 1
+  fi
 fi
 
 #=================================================
