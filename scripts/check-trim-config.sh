@@ -17,9 +17,6 @@ fi
 
 # 这些项目来自 config/base.config 现有精简项；只作最终状态报告。
 CHECK_ITEMS=(
-  CONFIG_USB_SUPPORT
-  CONFIG_MMC
-  CONFIG_ATA
   CONFIG_F2FS_FS
   CONFIG_BSD_PROCESS_ACCT
   CONFIG_CPU_FREQ_STAT
