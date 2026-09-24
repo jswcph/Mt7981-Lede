@@ -61,7 +61,7 @@ jobs:
 
           INPUT_DEVICE="${{ github.event.inputs.device }}"
 
-          ALL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m-nand","cmcc_rax3000me-nand","cmcc_rax3000m-emmc","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","cmcc_xr30-nand","xiaomi_redmi-router-ax6000"]'
+          ALL='["h3c_magic-nx30-pro-nmbm","qihoo_360t7","xiaomi_mi-router-ax3000t","cmcc_rax3000m","cmcc_rax3000me","netcore_n60","netcore_n60-pro","xiaomi_mi-router-wr30u-stock","abt_asr3000","ruijie_rg-x60-pro","nokia_ea0326gmp","jcg_q30-pro","xiaomi_redmi-router-ax6000-stock"]'
 
           if [ -z "$INPUT_DEVICE" ] || [ "$INPUT_DEVICE" = "all" ]; then
             echo "matrix={\"device\":$ALL}" >> "$GITHUB_OUTPUT"
@@ -170,7 +170,7 @@ jobs:
 
           if ! find "$OUT_DIR" -maxdepth 1 -type f \
             ! -name '*.seed' -print -quit | grep -q .; then
-            echo "ERROR: 未找到固件文件（BIN/ITB/IMG/sysupgrade/factory）"
+            echo "ERROR: 未找到固件文件（BIN/ITB/IMG/IMG.GZ/FIP/sysupgrade/factory）"
             exit 1
           fi
 
