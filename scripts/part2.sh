@@ -30,7 +30,7 @@ cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
 # 不再依赖独立 USB Job 的 ENABLE_USB_MODULES 环境变量。
 # 统一构建时，根据当前 matrix 设备自动决定是否加入 USB 相关包。
 case "${DEVICE}" in
-  cmcc_rax3000m-nand|cmcc_rax3000me-nand|cmcc_rax3000m-emmc|cmcc_xr30-nand|netcore_n60-pro)
+  cmcc_rax3000m|cmcc_rax3000me|netcore_n60-pro)
     echo "==== ${DEVICE}：自动启用 USB 存储/NAS/串口/网卡模块 ===="
     cat >> "${SRC_DIR}/.config" <<'USB_CONFIG'
 CONFIG_USB_SUPPORT=y
@@ -78,6 +78,14 @@ fi
 echo "==== 执行 make defconfig 解析依赖 ===="
 cd "${SRC_DIR}"
 make defconfig
+
+if ! grep -q "^CONFIG_TARGET_mediatek_filogic_DEVICE_.*=y" .config; then
+  echo "ERROR: 没有选中任何设备，设备名可能写错"
+  exit 1
+fi
+
+echo "==== defconfig 最终选中的 Filogic 设备 ===="
+grep "^CONFIG_TARGET_mediatek_filogic_DEVICE_.*=y" .config
 
 if [ "${ENABLE_USB_FOR_DEVICE:-0}" = "1" ]; then
   echo "==== USB 配置解析结果（defconfig 后）===="
