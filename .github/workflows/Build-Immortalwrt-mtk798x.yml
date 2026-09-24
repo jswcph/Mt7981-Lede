@@ -17,18 +17,16 @@ on:
           - h3c_magic-nx30-pro-nmbm
           - qihoo_360t7
           - xiaomi_mi-router-ax3000t
-          - cmcc_rax3000m-nand
-          - cmcc_rax3000me-nand
-          - cmcc_rax3000m-emmc
+          - cmcc_rax3000m
+          - cmcc_rax3000me
           - netcore_n60
           - netcore_n60-pro
-          - xiaomi_mi-router-wr30u
+          - xiaomi_mi-router-wr30u-stock
           - abt_asr3000
           - ruijie_rg-x60-pro
           - nokia_ea0326gmp
           - jcg_q30-pro
-          - cmcc_xr30-nand
-          - xiaomi_redmi-router-ax6000
+          - xiaomi_redmi-router-ax6000-stock
 
       repo_url:
         description: '源码仓库地址（ImmortalWrt）'
@@ -158,7 +156,8 @@ jobs:
             -o -iname '*sysupgrade*' \
             -o -iname '*factory*' \
             -o -iname '*.img' \
-            -o -iname '*.img.gz' \) \
+            -o -iname '*.img.gz' \
+            -o -iname '*.fip' \) \
             -exec cp -t "$OUT_DIR" {} +
 
           cp "$WORKDIR/openwrt/.config" \
@@ -215,6 +214,7 @@ jobs:
             -o -iname '*factory*' \
             -o -iname '*.img' \
             -o -iname '*.img.gz' \
+            -o -iname '*.fip' \
             -o -iname '*.seed' \) \
             -exec cp -t release {} +
 
