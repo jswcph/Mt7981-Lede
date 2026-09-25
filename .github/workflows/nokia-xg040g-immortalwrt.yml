@@ -209,6 +209,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release.outputs.tag }}
-          name: Nokia XG-040G-MD/MF ImmortalWrt ${{ steps.release.outputs.tag }}
+          name: 诺基亚 XG-040G-MD/MF ImmortalWrt-Master ${{ steps.release.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
