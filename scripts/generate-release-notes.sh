@@ -8,7 +8,7 @@ set -e
 DATE_STR=$(date +'%Y-%m-%d %H:%M')
 
 cat > RELEASE_NOTES.md << EOF
-## OpenWrt 固件自动构建
+## Immortalwrt-Master 诺基亚 040G-MD/MF-UBI固件
 
 编译时间：${DATE_STR}（北京时间）
 
