@@ -34,10 +34,8 @@ cat > RELEASE_NOTES.md << EOF
 | 主机名 | OpenWrt |
 | 默认密码 | password |
 | LAN 地址 | 192.168.6.1 |
-| 默认语言 | 简体中文 |
 | 默认主题 | Argon |
 
-> Nokia 与 Ruijie 固件请务必确认设备型号、Flash 分区布局和对应 U-Boot 后再刷写。本 Release 中的 Ruijie RG-X60 Pro 版本使用 107M UBI 分区布局。
 EOF
 
 echo "RELEASE_NOTES.md 生成完毕"
