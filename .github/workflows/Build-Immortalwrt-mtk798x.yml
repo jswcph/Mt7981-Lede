@@ -229,6 +229,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: OpenWrt 固件自动构建 ${{ steps.meta.outputs.tag }}
+          name: Immortalwrt-24.10snapshot Mt7981b/Mt7986a固件 ${{ steps.meta.outputs.tag }}
           body_path: RELEASE_NOTES.md
           files: release/*
