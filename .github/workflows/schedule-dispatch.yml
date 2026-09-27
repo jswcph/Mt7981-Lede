@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  trigger-immortalwrt-v24.10.6:
+  trigger-immortalwrt-v24-10-6:
     runs-on: ubuntu-latest
 
     steps:
