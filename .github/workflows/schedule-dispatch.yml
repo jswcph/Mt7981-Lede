@@ -1,0 +1,40 @@
+name: Scheduled Build Dispatcher
+
+on:
+  schedule:
+    # 每周日北京时间 03:00（UTC 19:00）
+    - cron: '0 19 * * 0'
+
+  # 允许手动测试调度器
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  trigger-immortalwrt-v24.10.6:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger ImmortalWrt v24.10.6
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run Build-Immortalwrt-v24.10.6.yml \
+            --repo "${{ github.repository }}" \
+            --ref immortalwrt-v24.10.6 \
+            -f device=all
+
+  trigger-nokia-xg040g-immortalwrt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Nokia XG-040G ImmortalWrt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run nokia-xg040g-immortalwrt.yml \
+            --repo "${{ github.repository }}" \
+            --ref nokia-xg040g-immortalwrt \
+            -f device=all
