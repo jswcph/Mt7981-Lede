@@ -6,7 +6,7 @@ on:
     - cron: '0 19 * * 0'
 
   # 允许手动测试调度器
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 permissions:
   actions: write
