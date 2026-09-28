@@ -14,8 +14,6 @@ on:
           - nokia_xg-040g-md-ubi
           - nokia_xg-040g-mf
           - nokia_xg-040g-mf-ubi
-  schedule:
-    - cron: '0 14 * * 0'
 
 env:
   TZ: Asia/Shanghai
