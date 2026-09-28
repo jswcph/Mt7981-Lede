@@ -38,3 +38,16 @@ jobs:
             --repo "${{ github.repository }}" \
             --ref nokia-xg040g-immortalwrt \
             -f device=all
+
+  trigger-lede-openwrt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Lede-OpenWrt
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run Build-Lede-OpenWrt.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f device=all
