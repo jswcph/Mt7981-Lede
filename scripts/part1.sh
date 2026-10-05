@@ -57,6 +57,7 @@ cat >> feeds.conf.default <<'EOF'
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
+src-git istore https://github.com/linkease/istore;main
 EOF
 
 ./scripts/feeds clean
@@ -90,6 +91,7 @@ git clone --depth=1 --single-branch --branch master \
 ./scripts/feeds install -d y -p passwall luci-app-passwall
 ./scripts/feeds install -d y -p passwall_packages xray-core sing-box
 ./scripts/feeds install -d y -p openclash luci-app-openclash
+./scripts/feeds install -d y -p istore luci-app-store
 
 # package-manager 的实际源码位于 LuCI feed 下；scripts/feeds 在部分情况下会将其
 # 链接到 package/feeds/luci，而不是 package/ 根目录。因此统一建立最终检查路径。
