@@ -58,6 +58,7 @@ src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
 src-git openclash https://github.com/vernesong/OpenClash
 src-git istore https://github.com/linkease/istore;main
+
 EOF
 
 ./scripts/feeds clean
@@ -75,6 +76,9 @@ git clone --depth=1 --single-branch --branch master \
 git clone --depth=1 --single-branch --branch master \
   https://github.com/jerrykuku/luci-app-argon-config.git \
   package/luci-app-argon-config
+
+git clone  https://github.com/gdy666/luci-app-lucky.git \
+  package/lucky
 
 # 安装本次实际需要的 LuCI 核心模块。
 # LuCI 的 modules 位于 luci feed 中，只有 feeds install 后才会进入
