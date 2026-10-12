@@ -101,12 +101,18 @@ else
 fi
 
 echo "==== [3/5] 安全写入自定义 Feeds ===="
-cat >> feeds.conf.default <<EOF
-src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
-src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-src-git openclash https://github.com/vernesong/OpenClash
-src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-EOF
+add_feed() {
+    local name="$1"
+    local url="$2"
+    if ! grep -qE "^[[:space:]]*src-git[[:space:]]+${name}[[:space:]]" feeds.conf.default; then
+        printf 'src-git %s %s\n' "$name" "$url" >> feeds.conf.default
+    fi
+}
+add_feed passwall https://github.com/Openwrt-Passwall/openwrt-passwall
+add_feed passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
+add_feed openclash https://github.com/vernesong/OpenClash
+add_feed luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
+add_feed istore 'https://github.com/linkease/istore;main'
 
 echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
 cd "${SRC_DIR}"
@@ -130,6 +136,16 @@ echo "==== [5/5] 更新并安装所有 Feeds ===="
 cd "${SRC_DIR}"
 ./scripts/feeds update -a
 ./scripts/feeds install -a
+
+echo "==== 显式安装 iStore 应用 ===="
+./scripts/feeds install -d y -p istore luci-app-store
+if [ -f "${SRC_DIR}/package/feeds/istore/luci-app-store/Makefile" ] || [ -f "${SRC_DIR}/feeds/istore/luci-app-store/Makefile" ]; then
+    echo ">>> iStore luci-app-store Makefile 验证通过"
+else
+    echo "ERROR: 未找到 iStore luci-app-store/Makefile"
+    exit 1
+fi
+
 find "${SRC_DIR}/package" "${SRC_DIR}/feeds" -maxdepth 5 -type d -iname "*argon*" 2>/dev/null || true
 
 echo "==============================================="
