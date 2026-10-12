@@ -75,61 +75,8 @@ fi
 #=================================================
 echo "==== 启用 iStore（luci-app-store） ===="
 if [ -f "${SRC_DIR}/package/feeds/istore/luci-app-store/Makefile" ] || [ -f "${SRC_DIR}/feeds/istore/luci-app-store/Makefile" ]; then
-  grep -q '^CONFIG_PACKAGE_luci-app-store=y
-
-#=================================================
-# 校验 1：目标设备必须被 defconfig 精确选中
-# 设备名写错时，defconfig 会静默丢弃该项，并回退到列表里的第一个设备
-# （abt_asr3000），所以不能只检查“有没有选中设备”，必须检查是不是这一个。
-#=================================================
-DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE}"
-if ! grep -qx "${DEVICE_SYMBOL}=y" .config; then
-  echo "ERROR: 目标设备 ${DEVICE} 没有被选中，设备名可能与源码不一致"
-  echo "defconfig 实际选中的设备："
-  grep "^CONFIG_TARGET_.*_DEVICE_.*=y" .config || echo "  （无）"
-  echo "请对照 target/linux/mediatek/image/filogic.mk 里的 TARGET_DEVICES 检查设备名"
-  exit 1
-fi
-
-echo "==== defconfig 最终选中的设备 ===="
-grep "^CONFIG_TARGET_.*_DEVICE_.*=y" .config
-
-#=================================================
-# 校验 2：USB 配置必须完整生效（缺任何一个包都直接失败）
-# 符号列表直接读取 config/usb.config，不再在脚本里重复维护一份。
-#=================================================
-if [ "${ENABLE_USB_FOR_DEVICE}" = "1" ]; then
-  echo "==== USB 配置解析结果（defconfig 后）===="
-  USB_MISSING=0
-  while IFS= read -r line; do
-    case "${line}" in
-      CONFIG_*=y) ;;
-      *) continue ;;
-    esac
-    if grep -qx "${line}" .config; then
-      echo "[USB OK]      ${line}"
-    else
-      echo "[USB MISSING] ${line}"
-      USB_MISSING=1
-    fi
-  done < "${USB_CONFIG_FILE}"
-
-  if [ "${USB_MISSING}" != "0" ]; then
-    echo "ERROR: 部分 USB 配置没有生效（包名不存在或依赖不满足），请检查上面的 [USB MISSING]"
-    exit 1
-  fi
-fi
-
-#=================================================
-# 可删除模块：精简配置最终状态核验（只读）
-# 如不需要核验，删除下面这段调用，并删除 scripts/check-trim-config.sh。
-# 本模块不强制关闭选项，避免破坏设备/驱动依赖。
-#=================================================
-echo "==== 检查内核精简项最终状态（只读）===="
-bash "${BASE_DIR}/scripts/check-trim-config.sh" "${SRC_DIR}/.config"
-
-echo ">>> part2.sh 执行完毕，当前编译设备：${DEVICE}"
- "${SRC_DIR}/.config" || echo 'CONFIG_PACKAGE_luci-app-store=y' >> "${SRC_DIR}/.config"
+  sed -i '/^CONFIG_PACKAGE_luci-app-store=/d' "${SRC_DIR}/.config"
+  echo 'CONFIG_PACKAGE_luci-app-store=y' >> "${SRC_DIR}/.config"
 else
   echo "ERROR: iStore 软件包目录不存在，无法启用 luci-app-store"
   exit 1
