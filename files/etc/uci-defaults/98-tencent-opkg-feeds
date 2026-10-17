@@ -1,0 +1,26 @@
+#!/bin/sh
+# 首次启动时将官方 OpenWrt 软件源切换到腾讯镜像。
+# 保留构建系统生成的版本号、目标路径和架构，避免硬编码某个固件版本。
+FEEDS="/etc/opkg/distfeeds.conf"
+[ -f "$FEEDS" ] || exit 0
+
+TMP="${FEEDS}.tmp"
+awk '
+  /^[[:space:]]*#/ || NF < 3 { next }
+  $2 == "openwrt_core" || $2 == "openwrt_base" || \
+  $2 == "openwrt_luci" || $2 == "openwrt_packages" || \
+  $2 == "openwrt_routing" || $2 == "openwrt_telephony" {
+    url = $3
+    sub(/^https?:\/\/downloads\.openwrt\.org/, "https://mirrors.tencent.com/lede", url)
+    sub(/^https?:\/\/mirrors\.openwrt\.org/, "https://mirrors.tencent.com/lede", url)
+    printf "%s %s %s\n", $1, $2, url
+  }
+' "$FEEDS" > "$TMP"
+
+if [ -s "$TMP" ]; then
+  mv "$TMP" "$FEEDS"
+else
+  rm -f "$TMP"
+fi
+
+exit 0
