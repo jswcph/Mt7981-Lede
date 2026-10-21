@@ -257,6 +257,7 @@ case "${DEVICE:-}" in
     ;;
 esac
 #=================================================
+#=================================================
 # 为 Cudy TR3000 U-Boot mod 注入 LEDE 设备定义
 # DTS 已由 LEDE 源码提供，设备定义需在配置前加入
 #=================================================
@@ -273,7 +274,30 @@ if [ "${DEVICE:-}" = "cudy_tr3000-mod" ]; then
     exit 1
   fi
 
-  if ! grep -q '^define Device/cudy_tr3000-mod
+  if ! grep -Fq "define Device/cudy_tr3000-mod" "${CUDY_IMAGE_MK}"; then
+    cat >> "${CUDY_IMAGE_MK}" <<'CUDY_DEVICE_EOF'
+
+define Device/cudy_tr3000-mod
+  DEVICE_VENDOR := Cudy
+  DEVICE_MODEL := TR3000
+  DEVICE_VARIANT := (U-Boot mod)
+  DEVICE_DTS := mt7981b-cudy-tr3000-mod
+  DEVICE_DTS_DIR := ../dts
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  KERNEL_IN_UBI := 1
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  DEVICE_PACKAGES := kmod-usb3 kmod-mt7981-firmware mt7981-wo-firmware
+endef
+TARGET_DEVICES += cudy_tr3000-mod
+CUDY_DEVICE_EOF
+  fi
+  echo ">>> Cudy TR3000 (U-Boot mod) 设备定义已加入 filogic.mk"
+fi
+
+#=================================================
+# [3/5] 写入自定义 Feeds
 #=================================================
 
 echo "==== [3/5] 安全写入自定义 Feeds ===="
