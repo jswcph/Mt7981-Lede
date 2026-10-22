@@ -251,56 +251,6 @@ case "${DEVICE:-}" in
     echo ">>> Nokia EA0326GMP ubi 扩容完成"
     ;;
 
-  #---------------- Cudy TR3000 mod: DTS 已定义分区，无需额外补丁 ----------------
-  cudy_tr3000-mod)
-    echo ">>> Cudy TR3000 mod 使用 DTS 中的分区定义，不应用额外分区补丁"
-    ;;
-
-  #---------------- 其他机型：不做任何分区补丁 ----------------
-  *)
-    echo ">>> ${DEVICE:-未指定} 无分区补丁，跳过"
-    ;;
-esac
-#=================================================
-#=================================================
-# 为 Cudy TR3000 U-Boot mod 注入 LEDE 设备定义
-# DTS 已由 LEDE 源码提供，设备定义需在配置前加入
-#=================================================
-if [ "${DEVICE:-}" = "cudy_tr3000-mod" ]; then
-  CUDY_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-cudy-tr3000-mod.dts"
-  CUDY_IMAGE_MK="${SRC_DIR}/target/linux/mediatek/image/filogic.mk"
-
-  if [ ! -f "${CUDY_DTS}" ]; then
-    echo "ERROR: 找不到 Cudy TR3000 mod DTS: ${CUDY_DTS}"
-    exit 1
-  fi
-  if [ ! -f "${CUDY_IMAGE_MK}" ]; then
-    echo "ERROR: 找不到 MediaTek Filogic 镜像定义: ${CUDY_IMAGE_MK}"
-    exit 1
-  fi
-
-  if ! grep -Fq "define Device/cudy_tr3000-mod" "${CUDY_IMAGE_MK}"; then
-    cat >> "${CUDY_IMAGE_MK}" <<'CUDY_DEVICE_EOF'
-
-define Device/cudy_tr3000-mod
-  DEVICE_VENDOR := Cudy
-  DEVICE_MODEL := TR3000
-  DEVICE_VARIANT := (U-Boot mod)
-  DEVICE_DTS := mt7981b-cudy-tr3000-mod
-  DEVICE_DTS_DIR := ../dts
-  UBINIZE_OPTS := -E 5
-  BLOCKSIZE := 128k
-  PAGESIZE := 2048
-  KERNEL_IN_UBI := 1
-  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
-  DEVICE_PACKAGES := kmod-usb3 kmod-mt7981-firmware mt7981-wo-firmware
-endef
-TARGET_DEVICES += cudy_tr3000-mod
-CUDY_DEVICE_EOF
-  fi
-  echo ">>> Cudy TR3000 (U-Boot mod) 设备定义已加入 filogic.mk"
-fi
-
 #=================================================
 # [3/5] 写入自定义 Feeds
 #=================================================
