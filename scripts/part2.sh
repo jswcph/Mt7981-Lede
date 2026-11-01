@@ -30,7 +30,7 @@ cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
 # 需要 USB 支持的设备：硬件带 USB 口（源码 filogic.mk 中带 kmod-usb3 的设备）。
 # 新增带 USB 的设备时，只需要在这里加设备名。
 # USB 相关的包统一维护在 config/usb.config，不要再写进各设备的 .config。
-USB_DEVICES="cmcc_rax3000m cmcc_rax3000me netcore_n60-pro"
+USB_DEVICES="cmcc_rax3000m cmcc_rax3000me netcore_n60-pro cudy_tr3000-v1-ubootmod"
 USB_CONFIG_FILE="${BASE_DIR}/config/usb.config"
 
 ENABLE_USB_FOR_DEVICE=0
