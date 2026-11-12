@@ -164,6 +164,53 @@ echo "${SRC_DIR}"
 
 
 #=================================================
+# Tenda BE12 Pro (MT7987A)
+# 注入设备树与镜像定义；只在选择该设备时添加
+#=================================================
+if [ "${DEVICE:-}" = "tenda_be12-pro" ]; then
+  echo "==== 准备 Tenda BE12 Pro 设备支持 ===="
+  TENDA_DTS_SRC="${GITHUB_WORKSPACE}/patches/mt7987a-tenda-be12-pro.dts"
+  TENDA_DTS_DST="${SRC_DIR}/target/linux/mediatek/dts/mt7987a-tenda-be12-pro.dts"
+  TENDA_IMAGE_MK="${SRC_DIR}/target/linux/mediatek/image/filogic.mk"
+
+  if [ ! -s "${TENDA_DTS_SRC}" ]; then
+    echo "ERROR: 找不到 Tenda BE12 Pro DTS: ${TENDA_DTS_SRC}"
+    exit 1
+  fi
+  if [ ! -f "${TENDA_IMAGE_MK}" ]; then
+    echo "ERROR: 找不到 Filogic 镜像定义文件: ${TENDA_IMAGE_MK}"
+    exit 1
+  fi
+  if ! grep -q 'define Build/tenda-mkdualimageheader' "${TENDA_IMAGE_MK}"; then
+    echo "ERROR: 当前源码缺少 tenda-mkdualimageheader 镜像处理函数"
+    exit 1
+  fi
+
+  install -D -m 0644 "${TENDA_DTS_SRC}" "${TENDA_DTS_DST}"
+
+  if ! grep -q 'define Device/tenda_be12-pro' "${TENDA_IMAGE_MK}"; then
+    cat >> "${TENDA_IMAGE_MK}" <<'TENDA_DEVICE_EOF'
+
+define Device/tenda_be12-pro
+  DEVICE_VENDOR := Tenda
+  DEVICE_MODEL := BE12 Pro
+  DEVICE_DTS := mt7987a-tenda-be12-pro
+  DEVICE_DTS_DIR := ../dts
+  DEVICE_PACKAGES := mt7987-2p5g-phy-firmware airoha-en8811h-firmware \\
+	kmod-phy-airoha-en8811h kmod-phy-mediatek-2p5g kmod-mt7992-firmware
+  UBINIZE_OPTS := -E 5
+  BLOCKSIZE := 128k
+  PAGESIZE := 2048
+  KERNEL_LOADADDR := 0x40000000
+  IMAGE/sysupgrade.bin := append-kernel | tenda-mkdualimageheader | sysupgrade-tar kernel=$$@ | append-metadata
+endef
+TARGET_DEVICES += tenda_be12-pro
+TENDA_DEVICE_EOF
+  fi
+  echo ">>> Tenda BE12 Pro DTS 与镜像定义已准备"
+fi
+
+#=================================================
 # 按机型应用 DTS 分区补丁（ubi 扩容）
 # 只有 DEVICE 匹配才执行，其他机型直接跳过，互不影响
 # 全部按内容检索替换，不依赖 patches/ 目录
