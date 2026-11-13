@@ -405,7 +405,7 @@ ls -lh "${SRC_DIR}/clash_meta"
 echo ">>> 检查 ARM64 ELF 架构:"
 
 if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-    if ! file "${SRC_DIR}/clash_meta" | grep -E "MIPS.*(LSB|little endian)" >/dev/null 2>&1; then
+    if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
       echo "ERROR: clash_meta 不是 MIPS little-endian 可执行文件"
       file "${SRC_DIR}/clash_meta"
       exit 1
