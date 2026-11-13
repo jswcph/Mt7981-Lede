@@ -19,6 +19,17 @@ if [ -n "$(uci -q get wireless.@wifi-iface[1])" ]; then
     uci set wireless.@wifi-iface[1].key='password'
 fi
 
+# Tenda BE12 Pro（MT7987A + MT7992E）：2.4GHz 默认使用 40MHz
+# 仅匹配该机型，不影响其他设备的无线带宽配置
+if [ "$(cat /tmp/sysinfo/board_name 2>/dev/null)" = "tenda,be12-pro" ]; then
+    for dev in $(uci -q show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+        band="$(uci -q get wireless.${dev}.band)"
+        if [ "$band" = "2g" ]; then
+            uci set wireless.${dev}.htmode='EHT40'
+        fi
+    done
+fi
+
 # 5G 频段默认开启 160MHz 带宽
 # 优先按 band=5g 判断具体是哪个 wifi-device，避免设备顺序不固定导致设错频段
 for dev in $(uci -q show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
