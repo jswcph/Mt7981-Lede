@@ -370,7 +370,7 @@ go mod download
 #   ${SRC_DIR}/clash_meta
 #=================================================
 
-echo "==== 编译 Mihomo Meta ARM64 核心 ===="
+echo "==== 编译 Mihomo Meta 核心 ===="
 
 # Filogic 设备为 ARM64；CR660x U-Boot mod 为 MT7621 / MIPS little-endian
 if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
@@ -402,7 +402,7 @@ file "${SRC_DIR}/clash_meta"
 echo ">>> 文件大小:"
 ls -lh "${SRC_DIR}/clash_meta"
 
-echo ">>> 检查 ARM64 ELF 架构:"
+echo ">>> 检查 Mihomo ELF 架构:"
 
 if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
     if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
@@ -418,7 +418,11 @@ else
     fi
 fi
 
-echo ">>> Mihomo ARM64 核心编译成功"
+if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
+  echo ">>> Mihomo MIPS little-endian 核心编译成功"
+else
+  echo ">>> Mihomo ARM64 核心编译成功"
+fi
 echo ">>> 当前 GitHub Runner 是 x86_64"
 echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
 
