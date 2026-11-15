@@ -579,16 +579,6 @@ echo ">>> Go:"
 go version
 
 echo ">>> part1.sh 完成"
- "${IMAGE_MK}" || {
-    echo "ERROR: FIT + UBI .itb 补丁校验失败"
-    exit 1
-  }
-  grep -q '^  IMAGE/sysupgrade.itb := append-kernel' "${IMAGE_MK}" || {
-    echo "ERROR: sysupgrade.itb 生成规则缺失"
-    exit 1
-  }
-  echo ">>> CMCC RAX3000Me NAND FIT + UBI 补丁应用成功"
-fi
 
 
 #=================================================
