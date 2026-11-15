@@ -199,7 +199,7 @@ replacement = """define Device/cmcc_rax3000me-nand
   KERNEL_LOADADDR := 0x44000000
   KERNEL := kernel-bin | gzip
   KERNEL_INITRAMFS := kernel-bin | lzma | \\
-\tfit lzma $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb with-initrd | pad-to 64k
+\tfit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
   KERNEL_INITRAMFS_SUFFIX := -recovery.itb
   UBINIZE_OPTS := -E 5
   BLOCKSIZE := 128k
@@ -209,7 +209,7 @@ replacement = """define Device/cmcc_rax3000me-nand
   UBOOTENV_IN_UBI := 1
   IMAGES := sysupgrade.itb
   IMAGE/sysupgrade.itb := append-kernel | \\
-\tfit gzip $(KDIR)/image-$(firstword $(DEVICE_DTS)).dtb external-static-with-rootfs | \\
+\tfit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \\
 \tpad-rootfs | append-metadata
 endef
 TARGET_DEVICES += cmcc_rax3000me-nand"""
