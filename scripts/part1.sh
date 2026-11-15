@@ -382,12 +382,25 @@ esac
 
 echo "==== [3/5] 安全写入自定义 Feeds ===="
 
-cat >> feeds.conf.default <<EOF
-src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
-src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-src-git openclash https://github.com/vernesong/OpenClash
-src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-EOF
+# 按 feed 名称检查，避免 LEDE 源码已内置同名 feed 时重复定义
+add_feed_if_missing() {
+  local feed_name="$1"
+  local feed_url="$2"
+
+  if grep -Eq "^[[:space:]]*src-[^[:space:]]+[[:space:]]+${feed_name}([[:space:]]|$)" feeds.conf.default; then
+    echo ">>> Feed 已存在，跳过: ${feed_name}"
+  else
+    echo "src-git ${feed_name} ${feed_url}" >> feeds.conf.default
+    echo ">>> 已添加 Feed: ${feed_name}"
+  fi
+}
+
+add_feed_if_missing passwall https://github.com/Openwrt-Passwall/openwrt-passwall
+add_feed_if_missing passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
+add_feed_if_missing openclash https://github.com/vernesong/OpenClash
+add_feed_if_missing luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
+
+unset -f add_feed_if_missing
 
 echo ">>> 自定义 Feeds:"
 echo "    PassWall"
