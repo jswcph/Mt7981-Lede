@@ -239,67 +239,7 @@ PY
 fi
 
 #=================================================
-if [ "${DEVICE:-}" = "cmcc_rax3000me-nand" ]; then
-  echo "==== 应用 CMCC RAX3000Me NAND FIT + UBI 镜像补丁 ===="
-  IMAGE_MK="${SRC_DIR}/target/linux/mediatek/image/filogic.mk"
-
-  if [ ! -f "${IMAGE_MK}" ]; then
-    echo "ERROR: 找不到 Filogic 镜像定义文件: ${IMAGE_MK}"
-    exit 1
-  fi
-
-  python3 - "${IMAGE_MK}" <<'PY'
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-content = path.read_text()
-
-pattern = re.compile(
-    r"define Device/cmcc_rax3000me-nand\n.*?\nendef\nTARGET_DEVICES \+= cmcc_rax3000me-nand",
-    re.S,
-)
-
-replacement = """define Device/cmcc_rax3000me-nand
-  DEVICE_VENDOR := CMCC
-  DEVICE_MODEL := RAX3000Me (NAND version)
-  DEVICE_DTS := mt7981b-cmcc-rax3000me
-  DEVICE_DTS_DIR := ../dts
-  DEVICE_DTS_OVERLAY := mt7981b-cmcc-rax3000me-nousb
-  DEVICE_DTC_FLAGS := --pad 4096
-  DEVICE_DTS_LOADADDR := 0x43f00000
-  DEVICE_PACKAGES := kmod-mt7981-firmware mt7981-wo-firmware kmod-usb3
-  KERNEL_LOADADDR := 0x44000000
-  KERNEL := kernel-bin | gzip
-  KERNEL_INITRAMFS := kernel-bin | lzma | \\
-\tfit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb with-initrd | pad-to 64k
-  KERNEL_INITRAMFS_SUFFIX := -recovery.itb
-  UBINIZE_OPTS := -E 5
-  BLOCKSIZE := 128k
-  PAGESIZE := 2048
-  IMAGE_SIZE := 116736k
-  KERNEL_IN_UBI := 1
-  UBOOTENV_IN_UBI := 1
-  IMAGES := sysupgrade.itb
-  IMAGE/sysupgrade.itb := append-kernel | \\
-\tfit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \\
-\tpad-rootfs | append-metadata
-endef
-TARGET_DEVICES += cmcc_rax3000me-nand"""
-
-content, count = pattern.subn(lambda _: replacement, content)
-if count != 1:
-    raise SystemExit(
-        f"ERROR: 预期只匹配到 1 个 cmcc_rax3000me-nand 定义，实际匹配 {count} 个；拒绝修改"
-    )
-
-path.write_text(content)
-print("已将 cmcc_rax3000me-nand 镜像定义替换为 FIT + UBI sysupgrade.itb")
-PY
-
-  grep -A28 -B1 'define Device/cmcc_rax3000me-nand' "${IMAGE_MK}"
-  grep -q '^  IMAGES := sysupgrade.itb (MT7987A)
+#=================================================
 # 注入设备树与镜像定义；只在选择该设备时添加
 #=================================================
 if [ "${DEVICE:-}" = "tenda_be12-pro" ]; then
