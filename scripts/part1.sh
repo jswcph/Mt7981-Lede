@@ -377,174 +377,102 @@ case "${DEVICE:-}" in
 esac
 
 #=================================================
-# Tenda BE12 Pro (MT7987A)
-# 注入设备树与镜像定义；只在选择该设备时添加
+# [3/5] 写入并规范化自定义 Feeds
 #=================================================
-if [ "${DEVICE:-}" = "tenda_be12-pro" ]; then
-  echo "==== 准备 Tenda BE12 Pro 设备支持 ===="
-  TENDA_DTS_SRC="${GITHUB_WORKSPACE}/patches/mt7987a-tenda-be12-pro.dts"
-  TENDA_DTS_DST="${SRC_DIR}/target/linux/mediatek/dts/mt7987a-tenda-be12-pro.dts"
-  TENDA_IMAGE_MK="${SRC_DIR}/target/linux/mediatek/image/filogic.mk"
 
-  if [ ! -s "${TENDA_DTS_SRC}" ]; then
-    echo "ERROR: 找不到 Tenda BE12 Pro DTS: ${TENDA_DTS_SRC}"
-    exit 1
-  fi
-  if [ ! -f "${TENDA_IMAGE_MK}" ]; then
-    echo "ERROR: 找不到 Filogic 镜像定义文件: ${TENDA_IMAGE_MK}"
-    exit 1
-  fi
-  if ! grep -q 'define Build/tenda-mkdualimageheader' "${TENDA_IMAGE_MK}"; then
-    echo "ERROR: 当前源码缺少 tenda-mkdualimageheader 镜像处理函数"
-    exit 1
-  fi
+echo "==== [3/5] 规范化自定义 Feeds ===="
 
-  install -D -m 0644 "${TENDA_DTS_SRC}" "${TENDA_DTS_DST}"
-
-  if ! grep -q 'define Device/tenda_be12-pro' "${TENDA_IMAGE_MK}"; then
-    cat >> "${TENDA_IMAGE_MK}" <<'TENDA_DEVICE_EOF'
-
-define Device/tenda_be12-pro
-  DEVICE_VENDOR := Tenda
-  DEVICE_MODEL := BE12 Pro
-  DEVICE_DTS := mt7987a-tenda-be12-pro
-  DEVICE_DTS_DIR := ../dts
-  DEVICE_PACKAGES := mt7987-2p5g-phy-firmware airoha-en8811h-firmware \\
-	kmod-phy-airoha-en8811h kmod-phy-mediatek-2p5g kmod-mt7992-firmware
-  UBINIZE_OPTS := -E 5
-  BLOCKSIZE := 128k
-  PAGESIZE := 2048
-  KERNEL_LOADADDR := 0x40000000
-  IMAGE/sysupgrade.bin := append-kernel | tenda-mkdualimageheader | sysupgrade-tar kernel=$$@ | append-metadata
-endef
-TARGET_DEVICES += tenda_be12-pro
-TENDA_DEVICE_EOF
-  fi
-  echo ">>> Tenda BE12 Pro DTS 与镜像定义已准备"
+# scripts/feeds 优先读取 feeds.conf；不存在时才读取 feeds.conf.default。
+# 必须修改实际生效的文件，不能只修改 feeds.conf.default。
+FEEDS_FILE="\${SRC_DIR}/feeds.conf"
+if [ ! -f "\${FEEDS_FILE}" ]; then
+  FEEDS_FILE="\${SRC_DIR}/feeds.conf.default"
+fi
+if [ ! -f "\${FEEDS_FILE}" ]; then
+  echo "ERROR: 找不到 feeds.conf 或 feeds.conf.default"
+  exit 1
 fi
 
-#=================================================
-# 按机型应用 DTS 分区补丁（ubi 扩容）
-# 只有 DEVICE 匹配才执行，其他机型直接跳过，互不影响
-# 全部按内容检索替换，不依赖 patches/ 目录
-#=================================================
+python3 - "\${FEEDS_FILE}" <<'PY'
+import pathlib
+import re
+import sys
 
-echo "==== 设备专属分区补丁检查: ${DEVICE:-未指定} ===="
+path = pathlib.Path(sys.argv[1])
+lines = path.read_text().splitlines()
 
-case "${DEVICE:-}" in
-
-  #---------------- Ruijie RG-X60 Pro: ubi 63M -> 107M ----------------
-  ruijie_rg-x60-pro)
-    RUIJIE_X60_PRO_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7986a-ruijie-rg-x60-pro.dts"
-    if [ ! -f "${RUIJIE_X60_PRO_DTS}" ]; then
-      echo "ERROR: 找不到 ${RUIJIE_X60_PRO_DTS}"
-      exit 1
-    fi
-    echo "==== 补丁：扩大 Ruijie RG-X60 Pro 的 ubi 分区 ===="
-
-    # 按 label 定位 ubi，改大小为 0x6b00000 (107MiB)
-    perl -0pi -e 's/(label = "ubi";\s*reg = <0x680000 )0x[0-9a-fA-F]+(>;)/${1}0x6b00000${2}/' "${RUIJIE_X60_PRO_DTS}"
-
-    echo ">>> 补丁后的分区信息："
-    grep -n -E 'partition@|label =|reg = <0x' "${RUIJIE_X60_PRO_DTS}"
-
-    grep -q 'reg = <0x680000 0x6b00000>;' "${RUIJIE_X60_PRO_DTS}" \
-      || { echo "ERROR: Ruijie ubi 补丁未生效"; exit 1; }
-    echo ">>> Ruijie RG-X60 Pro 107M 补丁应用成功"
-    ;;
-
-  #---------------- H3C Magic NX30 Pro: ubi 扩容 112M ----------------
-  h3c_magic-nx30-pro)
-    NX30_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
-    export NX30_UBI_SIZE="0x7000000"   # 112MiB，如需其他大小改这里
-
-    if [ ! -f "${NX30_DTS}" ]; then
-      echo "ERROR: 找不到 ${NX30_DTS}"
-      exit 1
-    fi
-    echo "==== 补丁：H3C Magic NX30 Pro ubi 扩容到 ${NX30_UBI_SIZE} ===="
-
-    # 按 label 定位 ubi，改大小
-    perl -0pi -e 's/(label = "ubi";\s*reg = <0x0*580000 )0x[0-9a-fA-F]+(>;)/$1$ENV{NX30_UBI_SIZE}$2/' "${NX30_DTS}"
-
-    # 按 label 删除 ubi 后面的 4 个分区（含前面的注释）
-    perl -0pi -e 's/(?:[ \t]*\/\*[^*]*\*\/[ \t]*\n)?[ \t]*partition\@[0-9a-fA-F]+ \{\s*label = "(?:pdt_data|pdt_data_1|exp|plugin)";.*?\};\n//gs' "${NX30_DTS}"
-
-    echo ">>> 补丁后的分区信息："
-    grep -n -E 'partition@|label =|reg = <0x' "${NX30_DTS}"
-
-    grep -q "reg = <0x0*580000 ${NX30_UBI_SIZE}>;" "${NX30_DTS}" \
-      || { echo "ERROR: NX30 Pro ubi 大小未修改成功"; exit 1; }
-    if grep -q -E 'label = "(pdt_data|pdt_data_1|exp|plugin)"' "${NX30_DTS}"; then
-      echo "ERROR: NX30 Pro 多余分区未删除干净"; exit 1
-    fi
-    echo ">>> NX30 Pro ubi 扩容完成"
-    ;;
-
-  #---------------- Nokia EA0326GMP: ubi 扩容 ----------------
-  # 分区表：删除 Aos-net / bvasPlugin，ubi 改为 0x980000 / 0x7680000
-  nokia_ea0326gmp)
-    NOKIA_DTS="$(find "${SRC_DIR}/target/linux/mediatek" -type f -name '*nokia-ea0326gmp*.dts' 2>/dev/null | head -n1)"
-    if [ -z "${NOKIA_DTS}" ] || [ ! -f "${NOKIA_DTS}" ]; then
-      echo "ERROR: 找不到 Nokia EA0326GMP 的 DTS"
-      exit 1
-    fi
-    echo "==== 补丁：Nokia EA0326GMP ubi  扩容 ===="
-    echo ">>> DTS: ${NOKIA_DTS}"
-
-    # 1) 按 label 删除 Aos-net / bvasPlugin 分区
-    perl -0pi -e 's/[ \t]*partition\@[0-9a-fA-F]+ \{\s*label = "(?:Aos-net|bvasPlugin)";.*?\};\n(?:[ \t]*\n)?//gs' "${NOKIA_DTS}"
-
-    # 2) 按 label 改写 ubi：节点名、compatible、reg
-    perl -0pi -e 's/partition\@[0-9a-fA-F]+ \{(\s*)(?:compatible = "linux,ubi";\s*)?label = "ubi";(\s*)reg = <[^>]*>;/partition\@980000 {$1compatible = "linux,ubi";$1label = "ubi";$2reg = <0x980000 0x7680000>;/' "${NOKIA_DTS}"
-
-    echo ">>> 补丁后的分区信息："
-    grep -n -E 'partition@|label =|compatible = "linux,ubi"|reg = <0x' "${NOKIA_DTS}"
-
-    grep -q 'reg = <0x980000 0x7680000>;' "${NOKIA_DTS}" \
-      || { echo "ERROR: Nokia ubi 大小未修改成功"; exit 1; }
-    grep -q 'compatible = "linux,ubi";' "${NOKIA_DTS}" \
-      || { echo "ERROR: Nokia ubi 缺少 compatible"; exit 1; }
-    if grep -q -E 'label = "(Aos-net|bvasPlugin)"' "${NOKIA_DTS}"; then
-      echo "ERROR: Aos-net/bvasPlugin 未删除干净"; exit 1
-    fi
-    [ "$(grep -c 'partition@980000' "${NOKIA_DTS}")" -eq 1 ] \
-      || { echo "ERROR: partition@980000 节点数量不是 1"; exit 1; }
-    echo ">>> Nokia EA0326GMP ubi 扩容完成"
-    ;;
-esac
-
-#=================================================
-# [3/5] 写入自定义 Feeds
-#=================================================
-
-echo "==== [3/5] 安全写入自定义 Feeds ===="
-
-# 按 feed 名称检查，避免源码中存在同名 feed 时重复定义
-add_feed_if_missing() {
-  local feed_name="$1"
-  local feed_url="$2"
-
-  if grep -Eq "^[[:space:]]*src-[^[:space:]]+[[:space:]]+${feed_name}([[:space:]]|$)" feeds.conf.default; then
-    echo ">>> Feed 已存在，跳过: ${feed_name}"
-  else
-    echo "src-git ${feed_name} ${feed_url}" >> feeds.conf.default
-    echo ">>> 已添加 Feed: ${feed_name}"
-  fi
+managed = {
+    "passwall": "https://github.com/Openwrt-Passwall/openwrt-passwall",
+    "passwall_packages": "https://github.com/Openwrt-Passwall/openwrt-passwall-packages",
+    "openclash": "https://github.com/vernesong/OpenClash",
+    "luci_theme_argon": "https://github.com/jerrykuku/luci-theme-argon",
 }
 
-add_feed_if_missing passwall https://github.com/Openwrt-Passwall/openwrt-passwall
-add_feed_if_missing passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-add_feed_if_missing openclash https://github.com/vernesong/OpenClash
-add_feed_if_missing luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
+feed_line = re.compile(
+    r"^\s*src-[\w-]+((?:\s+--\w+(?:=\S+)?)*)\s+(\w+)(?:\s+(\S.*))?$"
+)
 
-unset -f add_feed_if_missing
+seen = set()
+output = []
+duplicates = []
 
-echo ">>> 自定义 Feeds:"
-echo "    PassWall"
-echo "    PassWall Packages"
-echo "    OpenClash"
-echo "    Argon Theme"
+for line_number, line in enumerate(lines, 1):
+    active = line.split("#", 1)[0].strip()
+    if not active:
+        output.append(line)
+        continue
+
+    match = feed_line.match(active)
+    if not match:
+        output.append(line)
+        continue
+
+    name = match.group(2)
+
+    if name in managed:
+        # 自定义 Feed 由下方统一写入，避免保留源码中的旧地址或重复项。
+        continue
+
+    if name in seen:
+        duplicates.append((name, line_number))
+        continue
+
+    seen.add(name)
+    output.append(line)
+
+for name, url in managed.items():
+    output.append(f"src-git {name} {url}")
+
+path.write_text("\n".join(output).rstrip() + "\n")
+
+for name, line_number in duplicates:
+    print(f">>> 删除重复 Feed 定义: {name}（原第 {line_number} 行，保留首次定义）")
+
+print(f">>> 已规范化 Feed 文件: {path}")
+
+check_seen = set()
+for line_number, line in enumerate(path.read_text().splitlines(), 1):
+    active = line.split("#", 1)[0].strip()
+    if not active:
+        continue
+    match = feed_line.match(active)
+    if not match:
+        continue
+    name = match.group(2)
+    if name in check_seen:
+        raise SystemExit(f"ERROR: Feed 名称仍然重复: {name}，第 {line_number} 行")
+    check_seen.add(name)
+
+for name in managed:
+    if name not in check_seen:
+        raise SystemExit(f"ERROR: 缺少自定义 Feed: {name}")
+
+print(">>> Feed 名称无重复，四个自定义 Feed 均已配置")
+PY
+
+echo ">>> 生效的 Feed 配置文件: \${FEEDS_FILE}"
+grep -nE '^[[:space:]]*src-' "\${FEEDS_FILE}" || true
+unset FEEDS_FILE
 
 #=================================================
 # [4/5] 编译 Mihomo Meta ARM64
