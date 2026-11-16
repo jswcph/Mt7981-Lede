@@ -33,13 +33,18 @@ cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 # 确保首次开机脚本有执行权限（git 有时不保留执行位）
 find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
 
-echo "==== 写回预编译的 Mihomo Meta 核心 ===="
-mkdir -p "${SRC_DIR}/files/etc/openclash/core"
-if [ -f "${SRC_DIR}/clash_meta" ]; then
-  cp "${SRC_DIR}/clash_meta" "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+if [ "${DEVICE}" = "h3c_magic-nx30-pro" ]; then
+  echo "==== H3C NX30 Pro：跳过 Mihomo Meta 核心写回 ===="
+  rm -rf "${SRC_DIR}/files/etc/openclash"
 else
-  echo "警告：未找到预编译的 clash_meta，跳过内核写入"
+  echo "==== 写回预编译的 Mihomo Meta 核心 ===="
+  mkdir -p "${SRC_DIR}/files/etc/openclash/core"
+  if [ -f "${SRC_DIR}/clash_meta" ]; then
+    cp "${SRC_DIR}/clash_meta" "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+    chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+  else
+    echo "警告：未找到预编译的 clash_meta，跳过内核写入"
+  fi
 fi
 
 echo "==== 执行 make defconfig 解析依赖 ===="
