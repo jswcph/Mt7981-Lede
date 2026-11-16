@@ -738,12 +738,7 @@ esac
 
 echo "==== [3/5] 安全写入自定义 Feeds ===="
 
-cat >> feeds.conf.default <<EOF
-src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
-src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-src-git openclash https://github.com/vernesong/OpenClash
-src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-EOF
+echo ">>> 自定义 Feeds 已在前面的安全检查步骤处理；此处不再重复追加"
 
 echo ">>> 自定义 Feeds:"
 echo "    PassWall"
