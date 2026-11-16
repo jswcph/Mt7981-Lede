@@ -474,167 +474,157 @@ echo ">>> 生效的 Feed 配置文件: ${FEEDS_FILE}"
 grep -nE '^[[:space:]]*src-' "${FEEDS_FILE}" || true
 unset FEEDS_FILE
 
-# UU 加速器只为 H3C NX30 Pro 添加专用 Feed，其他设备不拉取、不安装。
-if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ]; then
-  UU_FEED_FILE="${SRC_DIR}/feeds.conf"
-  [ -f "${UU_FEED_FILE}" ] || UU_FEED_FILE="${SRC_DIR}/feeds.conf.default"
-  if ! grep -Eq '^[[:space:]]*src-[^[:space:]]+[[:space:]]+fengqipackages([[:space:]]|$)' "${UU_FEED_FILE}"; then
-    printf '%s\\n' 'src-git fengqipackages https://github.com/fengqi/immortalwrt-packages.git;openwrt-24.10' >> "${UU_FEED_FILE}"
-  fi
-  echo ">>> H3C NX30 Pro 专属 UU 加速器 Feed 已配置"
-fi
+#=================================================
+if [ "${DEVICE:-}" != "h3c_magic-nx30-pro" ]; then
+# [4/5] 编译 Mihomo Meta ARM64
+#=================================================
+
+echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
+
+cd "${SRC_DIR}"
+
+rm -rf mihomo
+
+echo ">>> 克隆 Mihomo Meta 分支"
+
+git clone \
+  --depth=1 \
+  --single-branch \
+  --branch Meta \
+  https://github.com/MetaCubeX/mihomo.git \
+  mihomo
+
+echo ">>> Mihomo Meta 源码准备完成"
+
+cd "${SRC_DIR}/mihomo"
+
+echo ">>> Mihomo Git 分支:"
+git branch --show-current
+
+echo ">>> Mihomo Commit:"
+git rev-parse --short HEAD
+
 
 #=================================================
-if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ]; then
-  echo ">>> H3C NX30 Pro：按设备要求跳过 Mihomo Meta 编译与安装"
+# Mihomo Go 依赖
+#=================================================
+
+echo "==== 下载 Mihomo Go 依赖 ===="
+
+go mod download
+
+
+#=================================================
+# 编译 Mihomo
+#
+# AX3000T:
+#   CPU: MT7981
+#   Architecture: ARM64 / AArch64
+#
+# 输出:
+#   ${SRC_DIR}/clash_meta
+#=================================================
+
+echo "==== 编译 Mihomo Meta 核心 ===="
+
+# Filogic 设备为 ARM64；CR660x U-Boot mod 为 MT7621 / MIPS little-endian
+if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
+  echo "==== 为 Xiaomi CR660x 编译 MIPS little-endian Mihomo ===="
+  CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat \
+    go build -trimpath -ldflags "-s -w" -o "${SRC_DIR}/clash_meta"
 else
-  # [4/5] 编译 Mihomo Meta ARM64
-  #=================================================
-  
-  echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
-  
-  cd "${SRC_DIR}"
-  
-  rm -rf mihomo
-  
-  echo ">>> 克隆 Mihomo Meta 分支"
-  
-  git clone \
-    --depth=1 \
-    --single-branch \
-    --branch Meta \
-    https://github.com/MetaCubeX/mihomo.git \
-    mihomo
-  
-  echo ">>> Mihomo Meta 源码准备完成"
-  
-  cd "${SRC_DIR}/mihomo"
-  
-  echo ">>> Mihomo Git 分支:"
-  git branch --show-current
-  
-  echo ">>> Mihomo Commit:"
-  git rev-parse --short HEAD
-  
-  
-  #=================================================
-  # Mihomo Go 依赖
-  #=================================================
-  
-  echo "==== 下载 Mihomo Go 依赖 ===="
-  
-  go mod download
-  
-  
-  #=================================================
-  # 编译 Mihomo
-  #
-  # AX3000T:
-  #   CPU: MT7981
-  #   Architecture: ARM64 / AArch64
-  #
-  # 输出:
-  #   ${SRC_DIR}/clash_meta
-  #=================================================
-  
-  echo "==== 编译 Mihomo Meta 核心 ===="
-  
-  # Filogic 设备为 ARM64；CR660x U-Boot mod 为 MT7621 / MIPS little-endian
-  if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-    echo "==== 为 Xiaomi CR660x 编译 MIPS little-endian Mihomo ===="
-    CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat \
-      go build -trimpath -ldflags "-s -w" -o "${SRC_DIR}/clash_meta"
-  else
-    echo "==== 为 Filogic 编译 ARM64 Mihomo Meta ===="
-    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-      go build -tags with_gvisor -trimpath -ldflags "-s -w" \
-      -o "${SRC_DIR}/clash_meta"
-  fi
-  
-  
-  #=================================================
-  # 检查编译结果
-  #=================================================
-  
-  echo "==== 检查 Mihomo 核心 ===="
-  
-  if [ ! -f "${SRC_DIR}/clash_meta" ]; then
-      echo "ERROR: Mihomo 编译失败，找不到 clash_meta"
+  echo "==== 为 Filogic 编译 ARM64 Mihomo Meta ===="
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+    go build -tags with_gvisor -trimpath -ldflags "-s -w" \
+    -o "${SRC_DIR}/clash_meta"
+fi
+
+
+#=================================================
+# 检查编译结果
+#=================================================
+
+echo "==== 检查 Mihomo 核心 ===="
+
+if [ ! -f "${SRC_DIR}/clash_meta" ]; then
+    echo "ERROR: Mihomo 编译失败，找不到 clash_meta"
+    exit 1
+fi
+
+echo ">>> 文件信息:"
+file "${SRC_DIR}/clash_meta"
+
+echo ">>> 文件大小:"
+ls -lh "${SRC_DIR}/clash_meta"
+
+echo ">>> 检查 Mihomo ELF 架构:"
+
+if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
+    if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
+      echo "ERROR: clash_meta 不是 MIPS little-endian 可执行文件"
+      file "${SRC_DIR}/clash_meta"
       exit 1
-  fi
-  
-  echo ">>> 文件信息:"
-  file "${SRC_DIR}/clash_meta"
-  
-  echo ">>> 文件大小:"
-  ls -lh "${SRC_DIR}/clash_meta"
-  
-  echo ">>> 检查 Mihomo ELF 架构:"
-  
-  if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-      if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
-        echo "ERROR: clash_meta 不是 MIPS little-endian 可执行文件"
-        file "${SRC_DIR}/clash_meta"
-        exit 1
-      fi
-  else
-      if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
-        echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
-        file "${SRC_DIR}/clash_meta"
-        exit 1
-      fi
-  fi
-  
-  if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-    echo ">>> Mihomo MIPS little-endian 核心编译成功"
-  else
-    echo ">>> Mihomo ARM64 核心编译成功"
-  fi
-  echo ">>> 当前 GitHub Runner 是 x86_64"
-  echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
-  
-  
-  #=================================================
-  # 安装到 OpenClash 核心目录
-  #=================================================
-  
-  echo "==== 安装 Mihomo 到 OpenClash 核心目录 ===="
-  
-  mkdir -p \
-    "${SRC_DIR}/files/etc/openclash/core"
-  
-  cp \
-    "${SRC_DIR}/clash_meta" \
-    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  
-  chmod 0755 \
-    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  
-  
-  #=================================================
-  # 检查 OpenClash Meta 核心
-  #=================================================
-  
-  echo "==== 检查 OpenClash Meta 核心 ===="
-  
-  if [ ! -f "${SRC_DIR}/files/etc/openclash/core/clash_meta" ]; then
-      echo "ERROR: OpenClash Meta 核心安装失败"
+    fi
+else
+    if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
+      echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
+      file "${SRC_DIR}/clash_meta"
       exit 1
-  fi
-  
-  echo ">>> OpenClash Meta 核心:"
-  ls -lh \
-    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  
-  echo ">>> 核心架构:"
-  file \
-    "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-  
-  echo "==== Mihomo Meta 核心准备完成 ===="
-  
-  
-  #=================================================
-  
+    fi
+fi
+
+if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
+  echo ">>> Mihomo MIPS little-endian 核心编译成功"
+else
+  echo ">>> Mihomo ARM64 核心编译成功"
+fi
+echo ">>> 当前 GitHub Runner 是 x86_64"
+echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
+
+
+#=================================================
+# 安装到 OpenClash 核心目录
+#=================================================
+
+echo "==== 安装 Mihomo 到 OpenClash 核心目录 ===="
+
+mkdir -p \
+  "${SRC_DIR}/files/etc/openclash/core"
+
+cp \
+  "${SRC_DIR}/clash_meta" \
+  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+chmod 0755 \
+  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+
+#=================================================
+# 检查 OpenClash Meta 核心
+#=================================================
+
+echo "==== 检查 OpenClash Meta 核心 ===="
+
+if [ ! -f "${SRC_DIR}/files/etc/openclash/core/clash_meta" ]; then
+    echo "ERROR: OpenClash Meta 核心安装失败"
+    exit 1
+fi
+
+echo ">>> OpenClash Meta 核心:"
+ls -lh \
+  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+echo ">>> 核心架构:"
+file \
+  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+
+echo "==== Mihomo Meta 核心准备完成 ===="
+
+
+#=================================================
+
+else
+  echo ">>> H3C NX30 Pro：跳过 Mihomo Meta 核心编译和安装"
 fi
 
 # [5/5] 更新并安装所有 Feeds
