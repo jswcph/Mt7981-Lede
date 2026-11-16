@@ -377,224 +377,6 @@ case "${DEVICE:-}" in
 esac
 
 #=================================================
-# [3/5] 写入自定义 Feeds
-#=================================================
-
-echo "==== [3/5] 安全写入自定义 Feeds ===="
-
-# 按 feed 名称检查，避免 LEDE 源码已内置同名 feed 时重复定义
-add_feed_if_missing() {
-  local feed_name="$1"
-  local feed_url="$2"
-
-  if grep -Eq "^[[:space:]]*src-[^[:space:]]+[[:space:]]+${feed_name}([[:space:]]|$)" feeds.conf.default; then
-    echo ">>> Feed 已存在，跳过: ${feed_name}"
-  else
-    echo "src-git ${feed_name} ${feed_url}" >> feeds.conf.default
-    echo ">>> 已添加 Feed: ${feed_name}"
-  fi
-}
-
-add_feed_if_missing passwall https://github.com/Openwrt-Passwall/openwrt-passwall
-add_feed_if_missing passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-add_feed_if_missing openclash https://github.com/vernesong/OpenClash
-add_feed_if_missing luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
-
-unset -f add_feed_if_missing
-
-echo ">>> 自定义 Feeds:"
-echo "    PassWall"
-echo "    PassWall Packages"
-echo "    OpenClash"
-echo "    Argon Theme"
-
-#=================================================
-# [4/5] 编译 Mihomo Meta ARM64
-#=================================================
-
-echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
-
-cd "${SRC_DIR}"
-
-rm -rf mihomo
-
-echo ">>> 克隆 Mihomo Meta 分支"
-
-git clone \
-  --depth=1 \
-  --single-branch \
-  --branch Meta \
-  https://github.com/MetaCubeX/mihomo.git \
-  mihomo
-
-echo ">>> Mihomo Meta 源码准备完成"
-
-cd "${SRC_DIR}/mihomo"
-
-echo ">>> Mihomo Git 分支:"
-git branch --show-current
-
-echo ">>> Mihomo Commit:"
-git rev-parse --short HEAD
-
-
-#=================================================
-# Mihomo Go 依赖
-#=================================================
-
-echo "==== 下载 Mihomo Go 依赖 ===="
-
-go mod download
-
-
-#=================================================
-# 编译 Mihomo
-#
-# AX3000T:
-#   CPU: MT7981
-#   Architecture: ARM64 / AArch64
-#
-# 输出:
-#   ${SRC_DIR}/clash_meta
-#=================================================
-
-echo "==== 编译 Mihomo Meta 核心 ===="
-
-# Filogic 设备为 ARM64；CR660x U-Boot mod 为 MT7621 / MIPS little-endian
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-  echo "==== 为 Xiaomi CR660x 编译 MIPS little-endian Mihomo ===="
-  CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat \
-    go build -trimpath -ldflags "-s -w" -o "${SRC_DIR}/clash_meta"
-else
-  echo "==== 为 Filogic 编译 ARM64 Mihomo Meta ===="
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -tags with_gvisor -trimpath -ldflags "-s -w" \
-    -o "${SRC_DIR}/clash_meta"
-fi
-
-
-#=================================================
-# 检查编译结果
-#=================================================
-
-echo "==== 检查 Mihomo 核心 ===="
-
-if [ ! -f "${SRC_DIR}/clash_meta" ]; then
-    echo "ERROR: Mihomo 编译失败，找不到 clash_meta"
-    exit 1
-fi
-
-echo ">>> 文件信息:"
-file "${SRC_DIR}/clash_meta"
-
-echo ">>> 文件大小:"
-ls -lh "${SRC_DIR}/clash_meta"
-
-echo ">>> 检查 Mihomo ELF 架构:"
-
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-    if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
-      echo "ERROR: clash_meta 不是 MIPS little-endian 可执行文件"
-      file "${SRC_DIR}/clash_meta"
-      exit 1
-    fi
-else
-    if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
-      echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
-      file "${SRC_DIR}/clash_meta"
-      exit 1
-    fi
-fi
-
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-  echo ">>> Mihomo MIPS little-endian 核心编译成功"
-else
-  echo ">>> Mihomo ARM64 核心编译成功"
-fi
-echo ">>> 当前 GitHub Runner 是 x86_64"
-echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
-
-
-#=================================================
-# 安装到 OpenClash 核心目录
-#=================================================
-
-echo "==== 安装 Mihomo 到 OpenClash 核心目录 ===="
-
-mkdir -p \
-  "${SRC_DIR}/files/etc/openclash/core"
-
-cp \
-  "${SRC_DIR}/clash_meta" \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-chmod 0755 \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-
-#=================================================
-# 检查 OpenClash Meta 核心
-#=================================================
-
-echo "==== 检查 OpenClash Meta 核心 ===="
-
-if [ ! -f "${SRC_DIR}/files/etc/openclash/core/clash_meta" ]; then
-    echo "ERROR: OpenClash Meta 核心安装失败"
-    exit 1
-fi
-
-echo ">>> OpenClash Meta 核心:"
-ls -lh \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-echo ">>> 核心架构:"
-file \
-  "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-echo "==== Mihomo Meta 核心准备完成 ===="
-
-
-#=================================================
-# [5/5] 更新并安装所有 Feeds
-#=================================================
-
-echo "==== [5/5] 更新并安装所有 Feeds ===="
-
-cd "${SRC_DIR}"
-
-./scripts/feeds update -a
-
-./scripts/feeds install -a
-
-echo "==== 查找 Argon 源码目录 ===="
-
-find "${SRC_DIR}/package" \
-     "${SRC_DIR}/feeds" \
-     -maxdepth 5 \
-     -type d \
-     -iname "*argon*" \
-     2>/dev/null || true
-#=================================================
-# 完成
-#=================================================
-
-echo "==============================================="
-echo "       part1.sh 执行完毕"
-echo "==============================================="
-
-echo ">>> LEDE 源码:"
-echo "${SRC_DIR}"
-
-echo ">>> Mihomo 核心:"
-echo "${SRC_DIR}/files/etc/openclash/core/clash_meta"
-
-echo ">>> Go:"
-go version
-
-echo ">>> part1.sh 完成"
-
-
-#=================================================
 # Tenda BE12 Pro (MT7987A)
 # 注入设备树与镜像定义；只在选择该设备时添加
 #=================================================
@@ -738,7 +520,25 @@ esac
 
 echo "==== [3/5] 安全写入自定义 Feeds ===="
 
-echo ">>> 自定义 Feeds 已在前面的安全检查步骤处理；此处不再重复追加"
+# 按 feed 名称检查，避免源码中存在同名 feed 时重复定义
+add_feed_if_missing() {
+  local feed_name="$1"
+  local feed_url="$2"
+
+  if grep -Eq "^[[:space:]]*src-[^[:space:]]+[[:space:]]+${feed_name}([[:space:]]|$)" feeds.conf.default; then
+    echo ">>> Feed 已存在，跳过: ${feed_name}"
+  else
+    echo "src-git ${feed_name} ${feed_url}" >> feeds.conf.default
+    echo ">>> 已添加 Feed: ${feed_name}"
+  fi
+}
+
+add_feed_if_missing passwall https://github.com/Openwrt-Passwall/openwrt-passwall
+add_feed_if_missing passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
+add_feed_if_missing openclash https://github.com/vernesong/OpenClash
+add_feed_if_missing luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
+
+unset -f add_feed_if_missing
 
 echo ">>> 自定义 Feeds:"
 echo "    PassWall"
