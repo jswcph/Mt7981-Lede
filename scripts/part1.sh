@@ -384,16 +384,16 @@ echo "==== [3/5] 规范化自定义 Feeds ===="
 
 # scripts/feeds 优先读取 feeds.conf；不存在时才读取 feeds.conf.default。
 # 必须修改实际生效的文件，不能只修改 feeds.conf.default。
-FEEDS_FILE="\${SRC_DIR}/feeds.conf"
-if [ ! -f "\${FEEDS_FILE}" ]; then
-  FEEDS_FILE="\${SRC_DIR}/feeds.conf.default"
+FEEDS_FILE="${SRC_DIR}/feeds.conf"
+if [ ! -f "${FEEDS_FILE}" ]; then
+  FEEDS_FILE="${SRC_DIR}/feeds.conf.default"
 fi
-if [ ! -f "\${FEEDS_FILE}" ]; then
+if [ ! -f "${FEEDS_FILE}" ]; then
   echo "ERROR: 找不到 feeds.conf 或 feeds.conf.default"
   exit 1
 fi
 
-python3 - "\${FEEDS_FILE}" <<'PY'
+python3 - "${FEEDS_FILE}" <<'PY'
 import pathlib
 import re
 import sys
@@ -470,8 +470,8 @@ for name in managed:
 print(">>> Feed 名称无重复，四个自定义 Feed 均已配置")
 PY
 
-echo ">>> 生效的 Feed 配置文件: \${FEEDS_FILE}"
-grep -nE '^[[:space:]]*src-' "\${FEEDS_FILE}" || true
+echo ">>> 生效的 Feed 配置文件: ${FEEDS_FILE}"
+grep -nE '^[[:space:]]*src-' "${FEEDS_FILE}" || true
 unset FEEDS_FILE
 
 #=================================================
