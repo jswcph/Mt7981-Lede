@@ -146,7 +146,7 @@ jobs:
           test -d "$SRC"
 
           find "$SRC" -type f \
-            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img.gz' \) \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*recovery*.itb' -o -iname '*.itb' -o -iname '*.img.gz' \) \
             -print0 |
           while IFS= read -r -d '' file; do
             BASE=$(basename "$file")
@@ -206,7 +206,7 @@ jobs:
 
           # 使用 -print0 + read，避免 find -exec 的反斜杠转义问题
           find firmware -type f \
-            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*.img.gz' -o -iname '*.seed' \) \
+            \( -iname '*sysupgrade*' -o -iname '*factory*' -o -iname '*recovery*.itb' -o -iname '*.itb' -o -iname '*.img.gz' -o -iname '*.seed' \) \
             -print0 |
           while IFS= read -r -d '' file; do
             cp -f "$file" release/
