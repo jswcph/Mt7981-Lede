@@ -31,22 +31,26 @@ sudo -E apt-get -qq install -y \
   wget xmlto xxd zlib1g-dev
 sudo timedatectl set-timezone "Asia/Shanghai" || true
 
-echo "==== 安装 Go 编译环境 ===="
-GO_VERSION="1.25.1"
-GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
-GO_URL="https://go.dev/dl/${GO_TARBALL}"
-rm -f "/tmp/${GO_TARBALL}"
-wget -q "${GO_URL}" -O "/tmp/${GO_TARBALL}"
-sudo rm -rf /usr/local/go
-sudo tar -C /usr/local -xzf "/tmp/${GO_TARBALL}"
-rm -f "/tmp/${GO_TARBALL}"
-export PATH="/usr/local/go/bin:${PATH}"
-which go
-go version
-GO_BIN="$(which go)"
-if [ "${GO_BIN}" != "/usr/local/go/bin/go" ]; then
-    echo "ERROR: 当前使用的不是 /usr/local/go/bin/go"
-    exit 1
+if [ "${DEVICE:-}" = "h3c_magic-nx30-pro-ubootmod" ]; then
+    echo "==== NX30 Pro：跳过 Go 安装（不构建 Mihomo Meta）===="
+else
+    echo "==== 安装 Go 编译环境 ===="
+    GO_VERSION="1.25.1"
+    GO_TARBALL="go${GO_VERSION}.linux-amd64.tar.gz"
+    GO_URL="https://go.dev/dl/${GO_TARBALL}"
+    rm -f "/tmp/${GO_TARBALL}"
+    wget -q "${GO_URL}" -O "/tmp/${GO_TARBALL}"
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf "/tmp/${GO_TARBALL}"
+    rm -f "/tmp/${GO_TARBALL}"
+    export PATH="/usr/local/go/bin:${PATH}"
+    which go
+    go version
+    GO_BIN="$(which go)"
+    if [ "${GO_BIN}" != "/usr/local/go/bin/go" ]; then
+        echo "ERROR: 当前使用的不是 /usr/local/go/bin/go"
+        exit 1
+    fi
 fi
 
 echo "==== [2/5] 克隆源码: ${REPO_URL} ===="
@@ -104,13 +108,20 @@ echo "==== [3/5] 安全写入自定义 Feeds ===="
 cat >> feeds.conf.default <<EOF
 src-git passwall https://github.com/Openwrt-Passwall/openwrt-passwall
 src-git passwall_packages https://github.com/Openwrt-Passwall/openwrt-passwall-packages
-src-git openclash https://github.com/vernesong/OpenClash
 src-git luci_theme_argon https://github.com/jerrykuku/luci-theme-argon
 EOF
+if [ "${DEVICE:-}" != "h3c_magic-nx30-pro-ubootmod" ]; then
+    echo "src-git openclash https://github.com/vernesong/OpenClash" >> feeds.conf.default
+else
+    echo "==== NX30 Pro：不添加 OpenClash feed ===="
+fi
 
-echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
-cd "${SRC_DIR}"
-rm -rf mihomo
+if [ "${DEVICE:-}" = "h3c_magic-nx30-pro-ubootmod" ]; then
+    echo "==== NX30 Pro：跳过 Mihomo Meta 核心构建 ===="
+else
+    echo "==== [4/5] 准备 Mihomo Meta 核心 ===="
+    cd "${SRC_DIR}"
+    rm -rf mihomo
 git clone --depth=1 --single-branch --branch Meta https://github.com/MetaCubeX/mihomo.git mihomo
 cd "${SRC_DIR}/mihomo"
 go mod download
@@ -125,6 +136,7 @@ fi
 mkdir -p "${SRC_DIR}/files/etc/openclash/core"
 cp "${SRC_DIR}/clash_meta" "${SRC_DIR}/files/etc/openclash/core/clash_meta"
 chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
+fi
 
 echo "==== [5/5] 更新并安装所有 Feeds ===="
 cd "${SRC_DIR}"
