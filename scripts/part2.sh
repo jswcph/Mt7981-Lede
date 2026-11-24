@@ -79,7 +79,16 @@ make defconfig
 # 设备名写错时，defconfig 会静默丢弃该项，并回退到列表里的第一个设备
 # （abt_asr3000），所以不能只检查“有没有选中设备”，必须检查是不是这一个。
 #=================================================
-DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE}"
+# workflow 中使用可读的机型别名；配置符号必须使用上游 filogic.mk 的 TARGET_DEVICES 名称。
+case "${DEVICE}" in
+  h3c_magic-nx30-pro-ubootmod)
+    OPENWRT_DEVICE="h3c_magic-nx30-pro"
+    ;;
+  *)
+    OPENWRT_DEVICE="${DEVICE}"
+    ;;
+esac
+DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${OPENWRT_DEVICE}"
 if ! grep -qx "${DEVICE_SYMBOL}=y" .config; then
   echo "ERROR: 目标设备 ${DEVICE} 没有被选中，设备名可能与源码不一致"
   echo "defconfig 实际选中的设备："
