@@ -71,14 +71,3 @@
 +  IMAGE/sysupgrade.bin := append-kernel | \
 +	fit gzip $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb external-static-with-rootfs | \
 +	h3c-nx30-pro-ubi-bin | check-size 114688k
-
---- a/target/linux/mediatek/image/filogic.mk
-+++ b/target/linux/mediatek/image/filogic.mk
-@@ -1156,1 +1156,7 @@
- TARGET_DEVICES += h3c_magic-nx30-pro
-+
-+define Device/h3c_magic-nx30-pro-ubootmod
-+  $(Device/h3c_magic-nx30-pro)
-+  DEVICE_VARIANT := (U-Boot Mod, 112MiB UBI layout)
-+endef
-+TARGET_DEVICES += h3c_magic-nx30-pro-ubootmod
