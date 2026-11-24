@@ -72,9 +72,9 @@ fi
 #=================================================
 # H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁
 #=================================================
-if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ]; then
+if [ "${DEVICE:-}" = "h3c_magic-nx30-pro" ] || [ "${DEVICE:-}" = "h3c_magic-nx30-pro-ubootmod" ]; then
     PATCH_FILE="${PATCH_DIR}/991-h3c-magic-nx30-pro-112m.patch"
-    echo "==== 应用 H3C Magic NX30 Pro 普通版 112MiB UBI 分区补丁 ===="
+    echo "==== 应用 H3C Magic NX30 Pro U-Boot Mod 112MiB UBI 分区及设备定义补丁 ===="
     [ -f "${PATCH_FILE}" ] || { echo "ERROR: 找不到补丁文件：${PATCH_FILE}"; exit 1; }
     patch -p1 --forward < "${PATCH_FILE}"
     NX30_DTS="${SRC_DIR}/target/linux/mediatek/dts/mt7981b-h3c-magic-nx30-pro.dts"
