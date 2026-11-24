@@ -79,7 +79,9 @@ make defconfig
 # 设备名写错时，defconfig 会静默丢弃该项，并回退到列表里的第一个设备
 # （abt_asr3000），所以不能只检查“有没有选中设备”，必须检查是不是这一个。
 #=================================================
-DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE}"
+# Kconfig 符号会将设备名中的连字符转换为下划线。
+DEVICE_SYMBOL_DEVICE="$(printf '%s' "${DEVICE}" | tr '-' '_')"
+DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE_SYMBOL_DEVICE}"
 if ! grep -qx "${DEVICE_SYMBOL}=y" .config; then
   echo "ERROR: 目标设备 ${DEVICE} 没有被选中，设备名可能与源码不一致"
   echo "defconfig 实际选中的设备："
