@@ -527,17 +527,11 @@ go mod download
 
 echo "==== 编译 Mihomo Meta 核心 ===="
 
-# Filogic 设备为 ARM64；CR660x U-Boot mod 为 MT7621 / MIPS little-endian
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-  echo "==== 为 Xiaomi CR660x 编译 MIPS little-endian Mihomo ===="
-  CGO_ENABLED=0 GOOS=linux GOARCH=mipsle GOMIPS=softfloat \
-    go build -trimpath -ldflags "-s -w" -o "${SRC_DIR}/clash_meta"
-else
-  echo "==== 为 Filogic 编译 ARM64 Mihomo Meta ===="
-  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
-    go build -tags with_gvisor -trimpath -ldflags "-s -w" \
-    -o "${SRC_DIR}/clash_meta"
-fi
+# Filogic 设备使用 ARM64 / AArch64
+echo "==== 为 Filogic 编译 ARM64 Mihomo Meta ===="
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+  go build -tags with_gvisor -trimpath -ldflags "-s -w" \
+  -o "${SRC_DIR}/clash_meta"
 
 
 #=================================================
@@ -559,25 +553,13 @@ ls -lh "${SRC_DIR}/clash_meta"
 
 echo ">>> 检查 Mihomo ELF 架构:"
 
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-    if ! file "${SRC_DIR}/clash_meta" | grep -E "ELF 32-bit LSB.*MIPS|MIPS.*LSB" >/dev/null 2>&1; then
-      echo "ERROR: clash_meta 不是 MIPS little-endian 可执行文件"
-      file "${SRC_DIR}/clash_meta"
-      exit 1
-    fi
-else
-    if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
-      echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
-      file "${SRC_DIR}/clash_meta"
-      exit 1
-    fi
+if ! file "${SRC_DIR}/clash_meta" | grep -E "ARM aarch64|ARM64" >/dev/null 2>&1; then
+  echo "ERROR: clash_meta 不是 ARM64/aarch64 可执行文件"
+  file "${SRC_DIR}/clash_meta"
+  exit 1
 fi
 
-if [ "${DEVICE:-}" = "xiaomi_cr660x-uboot-mod" ]; then
-  echo ">>> Mihomo MIPS little-endian 核心编译成功"
-else
-  echo ">>> Mihomo ARM64 核心编译成功"
-fi
+echo ">>> Mihomo ARM64 核心编译成功"
 echo ">>> 当前 GitHub Runner 是 x86_64"
 echo ">>> 不在 Runner 上执行 ARM64 clash_meta"
 
