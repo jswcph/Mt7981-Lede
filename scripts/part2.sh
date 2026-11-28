@@ -7,7 +7,6 @@ DEVICE_CONFIG="${BASE_DIR}/config/devices/${DEVICE}.config"
 [ -f "${DEVICE_CONFIG}" ] || { echo "错误：找不到设备配置 ${DEVICE_CONFIG}"; exit 1; }
 echo "==== 写入通用配置 + 设备配置：${DEVICE} ===="
 cat "${BASE_DIR}/config/base.config" "${DEVICE_CONFIG}" > "${SRC_DIR}/.config"
-
 USB_DEVICES="cmcc_rax3000m cmcc_rax3000me netcore_n60-pro cudy_tr3000-v1-ubootmod"
 USB_CONFIG_FILE="${BASE_DIR}/config/usb.config"
 ENABLE_USB_FOR_DEVICE=0
@@ -19,13 +18,10 @@ if [ "${ENABLE_USB_FOR_DEVICE}" = "1" ]; then
   printf '\n' >> "${SRC_DIR}/.config"
   cat "${USB_CONFIG_FILE}" >> "${SRC_DIR}/.config"
 fi
-
 echo "==== 写入默认系统设置覆盖目录 files/ ===="
-rm -rf "${SRC_DIR}/files"
-mkdir -p "${SRC_DIR}/files"
+rm -rf "${SRC_DIR}/files"; mkdir -p "${SRC_DIR}/files"
 cp -r "${BASE_DIR}/files/." "${SRC_DIR}/files/"
 find "${SRC_DIR}/files/etc/uci-defaults" -type f -exec chmod +x {} \;
-
 if [ "${DEVICE}" = "h3c_magic-nx30-pro-ubootmod" ] || [ "${DEVICE}" = "mobipromo_cm520-79f" ]; then
   echo "==== ${DEVICE}：跳过 Mihomo Meta 核心写入 ===="
 else
@@ -35,13 +31,11 @@ else
     chmod 0755 "${SRC_DIR}/files/etc/openclash/core/clash_meta"
   fi
 fi
-
 cd "${SRC_DIR}"
 make defconfig
-
 case "${DEVICE}" in
   h3c_magic-nx30-pro-ubootmod) DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_h3c_magic-nx30-pro" ;;
-  mobipromo_cm520-79f) DEVICE_SYMBOL="CONFIG_TARGET_DEVICE_ipq40xx_generic_DEVICE_mobipromo_cm520-79f" ;;
+  mobipromo_cm520-79f) DEVICE_SYMBOL="CONFIG_TARGET_ipq40xx_generic_DEVICE_mobipromo_cm520-79f" ;;
   *) DEVICE_SYMBOL="CONFIG_TARGET_mediatek_filogic_DEVICE_${DEVICE}" ;;
 esac
 grep -qx "${DEVICE_SYMBOL}=y" .config || {
@@ -51,7 +45,6 @@ grep -qx "${DEVICE_SYMBOL}=y" .config || {
 }
 echo "==== defconfig 最终选中的设备 ===="
 grep "^CONFIG_TARGET_.*DEVICE_.*=y" .config
-
 if [ "${DEVICE}" = "mobipromo_cm520-79f" ]; then
   grep -qx 'CONFIG_PACKAGE_kmod-usb-ledtrig-usbport=y' .config || {
     echo "ERROR: kmod-usb-ledtrig-usbport 未进入最终配置"; exit 1;
